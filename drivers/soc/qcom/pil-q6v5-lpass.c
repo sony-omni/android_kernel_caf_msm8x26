@@ -25,7 +25,6 @@
 #include <linux/of_gpio.h>
 #include <linux/clk/msm-clk.h>
 #include <linux/msm-bus-board.h>
-#include <soc/qcom/sysmon.h>
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/ramdump.h>
 
