@@ -203,9 +203,6 @@ enum sdc_mpm_pin_state {
 #define NUM_TUNING_PHASES		16
 #define MAX_DRV_TYPES_SUPPORTED_HS200	3
 
-/* Timeout value to avoid infinite waiting for pwr_irq */
-#define MSM_PWR_IRQ_TIMEOUT_MS 5000
-
 static const u32 tuning_block_64[] = {
 	0x00FF0FFF, 0xCCC3CCFF, 0xFFCC3CC3, 0xEFFEFFFE,
 	0xDDFFDFFF, 0xFBFFFBFF, 0xFF7FFFBF, 0xEFBDF777,
@@ -870,6 +867,7 @@ out:
 	return ret;
 }
 
+<<<<<<< HEAD
 static int sdhci_msm_cm_dll_sdc4_calibration(struct sdhci_host *host)
 {
 	u32 dll_status;
@@ -950,6 +948,8 @@ out:
 	return ret;
 }
 
+=======
+>>>>>>> mmc: sdhci-msm: improve tuning process
 static void sdhci_msm_set_mmc_drv_type(struct sdhci_host *host, u32 opcode,
 		u8 drv_type)
 {
@@ -983,7 +983,7 @@ int sdhci_msm_execute_tuning(struct sdhci_host *host, u32 opcode)
 {
 	unsigned long flags;
 	int tuning_seq_cnt = 3;
-	u8 phase, *data_buf, tuned_phases[16], tuned_phase_cnt = 0;
+	u8 phase, *data_buf, tuned_phases[NUM_TUNING_PHASES], tuned_phase_cnt;
 	const u32 *tuning_block_pattern = tuning_block_64;
 	int size = sizeof(tuning_block_64); /* Tuning pattern size in bytes */
 	int rc;
@@ -1083,13 +1083,20 @@ retry:
 			!memcmp(data_buf, tuning_block_pattern, size)) {
 			/* tuning is successful at this tuning point */
 			tuned_phases[tuned_phase_cnt++] = phase;
-			pr_debug("%s: %s: found good phase = %d\n",
+			pr_debug("%s: %s: found *** good *** phase = %d\n",
+				mmc_hostname(mmc), __func__, phase);
+		} else {
+			pr_debug("%s: %s: found ## bad ## phase = %d\n",
 				mmc_hostname(mmc), __func__, phase);
 		}
 	} while (++phase < 16);
 
+<<<<<<< HEAD
 	if ((tuned_phase_cnt == NUM_TUNING_PHASES) &&
 			card && mmc_card_mmc(card)) {
+=======
+	if ((tuned_phase_cnt == NUM_TUNING_PHASES) && mmc_card_mmc(card)) {
+>>>>>>> mmc: sdhci-msm: improve tuning process
 		/*
 		 * If all phases pass then its a problem. So change the card's
 		 * drive type to a different value, if supported and repeat
