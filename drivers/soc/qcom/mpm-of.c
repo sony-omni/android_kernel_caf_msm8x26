@@ -37,7 +37,6 @@
 #include <linux/clk/msm-clk.h>
 #include <linux/irqchip/msm-gpio-irq.h>
 #include <linux/irqchip/msm-mpm-irq.h>
-#include <linux/mutex.h>
 #include <asm/arch_timer.h>
 
 enum {
@@ -545,7 +544,6 @@ void msm_mpm_enter_sleep(uint32_t sclk_count, bool from_idle,
 void msm_mpm_exit_sleep(bool from_idle)
 {
 	unsigned long pending;
-	uint32_t *enabled_intr;
 	int i;
 	int k;
 
@@ -554,16 +552,12 @@ void msm_mpm_exit_sleep(bool from_idle)
 		return;
 	}
 
-	enabled_intr = from_idle ? msm_mpm_enabled_irq :
-						msm_mpm_wake_irq;
-
 	for (i = 0; i < MSM_MPM_REG_WIDTH; i++) {
 		pending = msm_mpm_read(MSM_MPM_REG_STATUS, i);
-		pending &= enabled_intr[i];
 
 		if (MSM_MPM_DEBUG_PENDING_IRQ & msm_mpm_debug_mask)
-			pr_info("%s: enabled_intr.%d pending.%d: 0x%08x 0x%08lx\n",
-				__func__, i, i, enabled_intr[i], pending);
+			pr_info("%s: pending.%d: 0x%08lx", __func__,
+					i, pending);
 
 		k = find_first_bit(&pending, 32);
 		while (k < 32) {
@@ -587,9 +581,6 @@ void msm_mpm_exit_sleep(bool from_idle)
 }
 static void msm_mpm_sys_low_power_modes(bool allow)
 {
-	static DEFINE_MUTEX(enable_xo_mutex);
-
-	mutex_lock(&enable_xo_mutex);
 	if (allow) {
 		if (xo_enabled) {
 			clk_disable_unprepare(xo_clk);
@@ -605,7 +596,6 @@ static void msm_mpm_sys_low_power_modes(bool allow)
 			xo_enabled = true;
 		}
 	}
-	mutex_unlock(&enable_xo_mutex);
 }
 
 void msm_mpm_suspend_prepare(void)
@@ -664,22 +654,13 @@ static int msm_mpm_dev_probe(struct platform_device *pdev)
 	struct resource *res = NULL;
 	int offset, ret;
 	struct msm_mpm_device_data *dev = &msm_mpm_dev_data;
-	const char *clk_name;
-	char *key;
 
 	if (msm_mpm_initialized & MSM_MPM_DEVICE_PROBED) {
 		pr_warn("MPM device probed multiple times\n");
 		return 0;
 	}
 
-	key = "clock-names";
-	ret = of_property_read_string(pdev->dev.of_node, key, &clk_name);
-	if (ret) {
-		pr_err("%s(): Cannot read clock name%s\n", __func__, key);
-		return -EINVAL;
-	}
-
-	xo_clk = devm_clk_get(&pdev->dev, clk_name);
+	xo_clk = devm_clk_get(&pdev->dev, "xo");
 
 	if (IS_ERR(xo_clk)) {
 		pr_err("%s(): Cannot get clk resource for XO\n", __func__);
@@ -727,8 +708,7 @@ static int msm_mpm_dev_probe(struct platform_device *pdev)
 		return -ENXIO;
 	}
 	ret = devm_request_irq(&pdev->dev, dev->mpm_ipc_irq, msm_mpm_irq,
-			IRQF_TRIGGER_RISING | IRQF_NO_SUSPEND, pdev->name,
-			msm_mpm_irq);
+			IRQF_TRIGGER_RISING, pdev->name, msm_mpm_irq);
 
 	if (ret) {
 		pr_info("%s(): request_irq failed errno: %d\n", __func__, ret);
