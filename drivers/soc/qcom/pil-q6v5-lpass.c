@@ -28,7 +28,6 @@
 #include <soc/qcom/sysmon.h>
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/ramdump.h>
-#include <soc/qcom/scm.h>
 
 #include <soc/qcom/smem.h>
 
