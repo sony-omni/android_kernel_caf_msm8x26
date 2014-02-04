@@ -85,6 +85,7 @@ struct pronto_data {
 	bool restart_inprogress;
 	bool crash;
 	struct ramdump_device *ramdump_dev;
+	int xo_mode;
 };
 
 static int pil_pronto_make_proxy_vote(struct pil_desc *pil)
