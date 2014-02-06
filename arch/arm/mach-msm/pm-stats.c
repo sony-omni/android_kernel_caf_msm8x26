@@ -61,7 +61,7 @@ struct pm_l2_debugfs_private_data {
 };
 
 struct _msm_pm_l2_time_stats {
-	struct msm_pm_time_stats stats[MSM_SPM_L2_MODE_LAST];
+	struct msm_pm_time_stats stats[MSM_SPM_MODE_NR];
 };
 
 static DEFINE_MUTEX(msm_pm_stats_mutex);
@@ -71,12 +71,11 @@ static DEFINE_PER_CPU_SHARED_ALIGNED(
 static DEFINE_SPINLOCK(msm_pm_l2_stats_lock);
 static struct _msm_pm_l2_time_stats msm_pm_l2_time_stats;
 static struct pm_l2_debugfs_private_data l2_stats_private_data[] = {
-	{NULL, MSM_SPM_L2_MODE_DISABLED},
-	{NULL, MSM_SPM_L2_MODE_RETENTION},
-	{NULL, MSM_SPM_L2_MODE_GDHS},
-	{NULL, MSM_SPM_L2_MODE_PC_NO_RPM},
-	{NULL, MSM_SPM_L2_MODE_POWER_COLLAPSE},
-	{NULL, MSM_SPM_L2_MODE_LAST},
+	{NULL, MSM_SPM_MODE_DISABLED},
+	{NULL, MSM_SPM_MODE_RETENTION},
+	{NULL, MSM_SPM_MODE_GDHS},
+	{NULL, MSM_SPM_MODE_POWER_COLLAPSE},
+	{NULL, MSM_SPM_MODE_NR},
 };
 
 /*
@@ -129,7 +128,7 @@ void msm_pm_l2_add_stat(uint32_t id, int64_t t)
 	int64_t bt;
 	int i;
 
-	if (id == MSM_SPM_L2_MODE_DISABLED || id >= MSM_SPM_L2_MODE_LAST)
+	if (id == MSM_SPM_MODE_DISABLED || id >= MSM_SPM_MODE_NR)
 		return;
 
 	spin_lock_irqsave(&msm_pm_l2_stats_lock, flags);
@@ -464,37 +463,10 @@ static int msm_pm_l2_stat_file_show(struct seq_file *m, void *v)
 	private_data = m->private;
 	stats = msm_pm_l2_time_stats.stats;
 
-	if (private_data->stats_id == MSM_SPM_L2_MODE_LAST) {
+	if (private_data->stats_id == MSM_SPM_MODE_NR) {
 		/* All stats print */
-		for (id = 1; id < MSM_SPM_L2_MODE_LAST; id++) {
-
-			s = stats[id].total_time;
-			ns = do_div(s, NSEC_PER_SEC);
-			seq_printf(m, "[L2] %s:\n"
-				"  count: %7d\n"
-				"  total_time: %lld.%09u\n",
-				stats[id].name,
-				stats[id].count,
-				s, ns);
-			bucket_time = stats[id].first_bucket_time;
-			for (i = 0;
-				 i < CONFIG_MSM_IDLE_STATS_BUCKET_COUNT - 1;
-				 i++) {
-				s = bucket_time;
-				ns = do_div(s, NSEC_PER_SEC);
-				seq_printf(m, "	<%6lld.%09u: %7d (%lld-%lld)\n",
-					s, ns, stats[id].bucket[i],
-					stats[id].min_time[i],
-					stats[id].max_time[i]);
-				bucket_time <<=
-					CONFIG_MSM_IDLE_STATS_BUCKET_SHIFT;
-			}
-			seq_printf(m,
-				">=%6lld.%09u:%7d (%llid-%lld)\n",
-				s, ns, stats[id].bucket[i],
-				stats[id].min_time[i],
-				stats[id].max_time[i]);
-		}
+		for (id = 1; id < MSM_SPM_MODE_NR; id++)
+			stats_show(m, &stats[id], 0, MSM_PM_STATS_TYPE_L2);
 	} else {
 		/* individual status print */
 		id = private_data->stats_id;
@@ -550,25 +522,21 @@ static bool msm_pm_debugfs_create_l2(void)
 	if (!msm_pm_l2_root)
 		return false;
 
-	stats[MSM_SPM_L2_MODE_GDHS].name = "GDHS";
-	stats[MSM_SPM_L2_MODE_GDHS].first_bucket_time =
+	stats[MSM_SPM_MODE_GDHS].name = "GDHS";
+	stats[MSM_SPM_MODE_GDHS].first_bucket_time =
 		CONFIG_MSM_IDLE_STATS_FIRST_BUCKET;
 
-	stats[MSM_SPM_L2_MODE_RETENTION].name = "Retention";
-	stats[MSM_SPM_L2_MODE_RETENTION].first_bucket_time =
+	stats[MSM_SPM_MODE_RETENTION].name = "Retention";
+	stats[MSM_SPM_MODE_RETENTION].first_bucket_time =
 		CONFIG_MSM_IDLE_STATS_FIRST_BUCKET;
 
-	stats[MSM_SPM_L2_MODE_PC_NO_RPM].name = "No RPM";
-	stats[MSM_SPM_L2_MODE_PC_NO_RPM].first_bucket_time =
-		CONFIG_MSM_IDLE_STATS_FIRST_BUCKET;
-
-	stats[MSM_SPM_L2_MODE_POWER_COLLAPSE].name = "PC";
-	stats[MSM_SPM_L2_MODE_POWER_COLLAPSE].first_bucket_time =
+	stats[MSM_SPM_MODE_POWER_COLLAPSE].name = "PC";
+	stats[MSM_SPM_MODE_POWER_COLLAPSE].first_bucket_time =
 		CONFIG_MSM_SUSPEND_STATS_FIRST_BUCKET;
 
-	for (stat_id = 1;
-		stat_id < MSM_SPM_L2_MODE_LAST;
-		stat_id++) {
+	for (stat_id = 1; stat_id < MSM_SPM_MODE_NR; stat_id++) {
+		if (!stats[stat_id].name)
+			continue;
 		if (!debugfs_create_file(
 			stats[stat_id].name,
 			S_IRUGO, msm_pm_l2_root,
@@ -577,7 +545,7 @@ static bool msm_pm_debugfs_create_l2(void)
 			goto l2_err;
 		}
 	}
-	stat_id = MSM_SPM_L2_MODE_LAST;
+	stat_id = MSM_SPM_MODE_NR;
 	if (!debugfs_create_file("stats",
 		S_IRUGO, msm_pm_l2_root,
 		(void *)&l2_stats_private_data[stat_id],
