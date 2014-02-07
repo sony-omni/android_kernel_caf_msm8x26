@@ -16,11 +16,12 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 		reg = <0xb089000 0x1000>;
+		qcom,name = "core0";
 		qcom,core-id = <0>;
 		qcom,saw2-ver-reg = <0xfd0>;
 		qcom,saw2-cfg = <0x01>;
 		qcom,saw2-spm-dly= <0x3C102800>;
-		qcom,saw2-spm-ctl = <0x8>;
+		qcom,saw2-spm-ctl = <0xe>;
 		qcom,saw2-spm-cmd-wfi = [60 03 60 0B 0f];
 		qcom,saw2-spm-cmd-spc = [20 10 80 30 90 5b 60 03 60 3B 76 76 0B
 				94 5B 80 10 26 30 0f];
@@ -33,11 +34,12 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 		reg = <0xb099000 0x1000>;
+		qcom,name = "core1";
 		qcom,core-id = <1>;
 		qcom,saw2-ver-reg = <0xfd0>;
 		qcom,saw2-cfg = <0x01>;
 		qcom,saw2-spm-dly= <0x3c102800>;
-		qcom,saw2-spm-ctl = <0x8>;
+		qcom,saw2-spm-ctl = <0xe>;
 		qcom,saw2-spm-cmd-wfi = [60 03 60 0B 0f];
 		qcom,saw2-spm-cmd-spc = [20 10 80 30 90 5b 60 03 60 3B 76 76 0B
 				94 5B 80 10 26 30 0f];
@@ -50,11 +52,12 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 		reg = <0xb0a9000 0x1000>;
+		qcom,name = "core2";
 		qcom,core-id = <2>;
 		qcom,saw2-ver-reg = <0xfd0>;
 		qcom,saw2-cfg = <0x01>;
 		qcom,saw2-spm-dly= <0x3c102800>;
-		qcom,saw2-spm-ctl = <0x8>;
+		qcom,saw2-spm-ctl = <0xe>;
 		qcom,saw2-spm-cmd-wfi = [60 03 60 0B 0f];
 		qcom,saw2-spm-cmd-spc = [20 10 80 30 90 5b 60 03 60 3B 76 76 0B
 				94 5B 80 10 26 30 0f];
@@ -67,11 +70,12 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 		reg = <0xb0b9000 0x1000>;
+		qcom,name = "core3";
 		qcom,core-id = <3>;
 		qcom,saw2-ver-reg = <0xfd0>;
 		qcom,saw2-cfg = <0x01>;
 		qcom,saw2-spm-dly= <0x3c102800>;
-		qcom,saw2-spm-ctl = <0x8>;
+		qcom,saw2-spm-ctl = <0xe>;
 		qcom,saw2-spm-cmd-wfi = [60 03 60 0B 0f];
 		qcom,saw2-spm-cmd-spc = [20 10 80 30 90 5b 60 03 60 3B 76 76 0B
 				94 5B 80 10 26 30 0f];
@@ -84,12 +88,13 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 		reg = <0xb012000 0x1000>;
+		qcom,name = "l2";
 		qcom,core-id = <0xffff>; /* L2/APCS SAW */
 		qcom,saw2-ver-reg = <0xfd0>;
 		qcom,saw2-cfg = <0x14>;
 		qcom,saw2-spm-dly= <0x3C102800>;
-		qcom,saw2-spm-ctl = <0x8>;
-		qcom,saw2-pmic-data0 = <0x02030080>;
+		qcom,saw2-spm-ctl = <0xe>;
+		qcom,saw2-pmic-data0 = <0x04030080>;
 		qcom,saw2-pmic-data1 = <0x00030000>;
 		qcom,vctl-timeout-us = <50>;
 		qcom,vctl-port = <0x0>;
@@ -99,9 +104,10 @@
 		qcom,saw2-spm-cmd-gdhs = [00 20 32 6B C0 E0 D0 42 F0 03 50 4E
 				02 02 D0 E0 C0 22 6B 02 32 52 F0 0F];
 		qcom,saw2-spm-cmd-pc-no-rpm = [00 32 B0 10 E0 D0 6B C0 42 11 03
-				01 B0 50 4E 02 02 C0 D0 12 E0 6B 02 32 50 0F];
-		qcom,saw2-spm-cmd-pc = [00 32 B0 10 E0 D0 6B C0 42 11 07
-				01 B0 50 4E 02 02 C0 D0 12 E0 6B 02 32 50 0F];
+				01 B0 50 4E 02 02 C0 D0 12 E0 6B 02 32 50
+				0F];
+		qcom,saw2-spm-cmd-pc = [00 32 B0 10 E0 D0 6B C0 42 11 07 01
+				B0 50 4E 02 02 C0 D0 12 E0 6B 02 32 50 0F];
 		qcom,L2-spm-is-apcs-master;
 	};
 
@@ -109,6 +115,7 @@
 	qcom,lpm-levels {
 		compatible = "qcom,lpm-levels";
 		qcom,default-l2-state = "l2_cache_active";
+		qcom,allow-synced-levels;
 		#address-cells = <1>;
 		#size-cells = <0>;
 
@@ -151,7 +158,7 @@
 				qcom,ss-power = <372>;
 				qcom,energy-overhead = <738750>;
 				qcom,time-overhead = <1410>;
-				qcom,min-cpu-mode= "pc";
+				qcom,min-cpu-mode= "standalone_pc";
 				qcom,sync-mode;
 			};
 
@@ -182,12 +189,14 @@
 		qcom,mode = "tz";
 	};
 
-	qcom,mpm@601c8 {
+	qcom,mpm@601d0 {
 		compatible = "qcom,mpm-v2";
-		reg = <0x601c8 0x1000>, /* MSM_RPM_MPM_BASE 4K */
+		reg = <0x601d0 0x1000>, /* MSM_RPM_MPM_BASE 4K */
 		    <0xb011008 0x4>;
 		reg-names = "vmpm", "ipc";
 		interrupts = <0 171 1>;
+		clocks = <&clock_rpm clk_xo_lpm_clk>;
+		clock-names = "xo";
 
 		qcom,ipc-bit-offset = <1>;
 
@@ -196,17 +205,40 @@
 			<50 172>, /* usb1_hs_async_wakeup_irq */
 			<53 104>, /* mdss_irq */
 			<62 222>, /* ee0_krait_hlos_spmi_periph_irq */
+			<0xff 18>,  /* APC_qgicQTmrSecPhysIrptReq */
+			<0xff 19>,  /* APC_qgicQTmrNonSecPhysIrptReq */
+			<0xff 20>,  /* qgicQTmrVirtIrptReq */
+			<0xff 35>,  /* WDT_barkInt */
+			<0xff 39>,  /* arch_mem_timer */
+			<0xff 40>,  /* qtmr_phy_irq[0] */
+			<0xff 47>,  /* rbif_irq[0] */
+			<0xff 56>,  /* q6_wdog_expired_irq */
 			<0xff 57>,  /* mss_to_apps_irq(0) */
 			<0xff 58>,  /* mss_to_apps_irq(1) */
 			<0xff 59>,  /* mss_to_apps_irq(2) */
 			<0xff 60>,  /* mss_to_apps_irq(3) */
+			<0xff 61>,  /* mss_a2_bam_irq */
+			<0xff 65>,  /* o_gc_sys_irq[0] */
+			<0xff 74>,  /* smmu_bus_intr[2] */
+			<0xff 75>,  /* smmu_bus_intr[3] */
+			<0xff 78>,  /* smmu_bus_intr[5] */
+			<0xff 79>,  /* smmu_bus_intr[6] */
+			<0xff 97>,  /* smmu_bus_intr[10] */
+			<0xff 102>, /* smmu_bus_intr[14] */
+			<0xff 131>, /* qup_irq */
+			<0xff 140>, /* uart_dm_intr */
+			<0xff 155>, /* sdc1_irq(0) */
+			<0xff 157>, /* sdc2_irq(0) */
+			<0xff 166>, /* usb_hs_irq */
+			<0xff 170>, /* sdc1_pwr_cmd_irq */
 			<0xff 173>, /* o_wcss_apss_smd_hi */
 			<0xff 174>, /* o_wcss_apss_smd_med */
 			<0xff 175>, /* o_wcss_apss_smd_low */
 			<0xff 176>, /* o_wcss_apss_smsm_irq */
 			<0xff 177>, /* o_wcss_apss_wlan_data_xfer_done */
 			<0xff 178>, /* o_wcss_apss_wlan_rx_data_avail */
-			<0xff 179>, /* o_wcss_apss_asic_intr
+			<0xff 179>, /* o_wcss_apss_asic_intr */
+			<0xff 181>, /* o_wcss_apss_wdog_bite_and_reset_rdy */
 
 			<0xff 188>, /* lpass_irq_out_apcs(0) */
 			<0xff 189>, /* lpass_irq_out_apcs(1) */
@@ -218,6 +250,7 @@
 			<0xff 195>, /* lpass_irq_out_apcs(7) */
 			<0xff 196>, /* lpass_irq_out_apcs(8) */
 			<0xff 197>, /* lpass_irq_out_apcs(9) */
+			<0xff 198>, /* coresight-tmc-etr interrupt */
 			<0xff 200>, /* rpm_ipc(4) */
 			<0xff 201>, /* rpm_ipc(5) */
 			<0xff 202>, /* rpm_ipc(6) */
@@ -226,9 +259,15 @@
 			<0xff 205>, /* rpm_ipc(25) */
 			<0xff 206>, /* rpm_ipc(26) */
 			<0xff 207>, /* rpm_ipc(27) */
-			<0xff 240>; /* summary_irq_kpss */
+			<0xff 239>, /* crypto_bam_irq[1]*/
+			<0xff 240>, /* summary_irq_kpss */
+			<0xff 253>, /* sdc2_pwr_cmd_irq */
+			<0xff 269>, /* rpm_wdog_expired_irq */
+			<0xff 270>, /* blsp1_bam_irq[0] */
+			<0xff 275>, /* rpm_ipc(30) */
+			<0xff 276>; /* rpm_ipc(31) */
 
-		qcom,gpio-parent = <&msmgpio>;
+		qcom,gpio-parent = <&msm_gpio>;
 		qcom,gpio-map = <3  108 >,
 			<4  1 >,
 			<5  5 >,
@@ -304,6 +343,13 @@
 		qcom,sleep-stats-version = <2>;
 	};
 
+	qcom,rpm-master-stats@60150 {
+		compatible = "qcom,rpm-master-stats";
+		reg = <0x60150 0x2030>;
+		qcom,masters = "APSS", "MPSS", "PRONTO";
+		qcom,master-stats-version = <2>;
+		qcom,master-offset = <4096>;
+	};
 	qcom,rpm-rbcpr-stats@0x29daa0  {
 		compatible = "qcom,rpmrbcpr-stats";
 		reg = <0x29daa0 0x1a0000>;
