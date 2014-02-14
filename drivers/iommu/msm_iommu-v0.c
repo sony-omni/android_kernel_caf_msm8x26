@@ -27,11 +27,11 @@
 #include <asm/cacheflush.h>
 #include <asm/sizes.h>
 
-#include <mach/iommu_perfmon.h>
-#include <mach/iommu_hw-v0.h>
-#include <mach/msm_iommu_priv.h>
-#include <mach/iommu.h>
-#include <mach/msm_bus.h>
+#include "msm_iommu_perfmon.h"
+#include "msm_iommu_hw-v0.h"
+#include "msm_iommu_priv.h"
+#include <linux/qcom_iommu.h>
+#include <linux/msm-bus.h>
 
 #include <soc/qcom/smem.h>
 

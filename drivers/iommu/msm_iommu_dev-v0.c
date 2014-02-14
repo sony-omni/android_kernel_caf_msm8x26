@@ -27,10 +27,10 @@
 #include <linux/of_address.h>
 #include <linux/of_device.h>
 
-#include <mach/iommu_perfmon.h>
-#include <mach/iommu_hw-v0.h>
-#include <mach/iommu.h>
-#include <mach/msm_bus.h>
+#include "msm_iommu_perfmon.h"
+#include "msm_iommu_hw-v0.h"
+#include <linux/qcom_iommu.h>
+#include <linux/msm-bus.h>
 
 static struct of_device_id msm_iommu_v0_ctx_match_table[];
 static struct iommu_access_ops *msm_iommu_access_ops;
