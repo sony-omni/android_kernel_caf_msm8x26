@@ -1796,6 +1796,52 @@ static void reconnect_to_bam(void)
 	if (i)
 		pr_err("%s: rx event reg failed rc = %d\n", __func__,
 									i);
+		i = bam_ops->sps_connect_ptr(bam_rx_pipe, &rx_connection);
+		if (i)
+			pr_err("%s: rx connection failed rc = %d\n", __func__,
+									i);
+		i = bam_ops->sps_register_event_ptr(bam_tx_pipe,
+				&tx_register_event);
+		if (i)
+			pr_err("%s: tx event reg failed rc = %d\n", __func__,
+									i);
+		i = bam_ops->sps_register_event_ptr(bam_rx_pipe,
+				&rx_register_event);
+		if (i)
+			pr_err("%s: rx event reg failed rc = %d\n", __func__,
+									i);
+	}
+
+	if (ssr_skipped_disconnect) {
+		/* delayed to here to prevent bus stall */
+		bam_ops->sps_disconnect_ptr(bam_tx_pipe);
+		bam_ops->sps_disconnect_ptr(bam_rx_pipe);
+		memset(rx_desc_mem_buf.base, 0, rx_desc_mem_buf.size);
+		memset(tx_desc_mem_buf.base, 0, tx_desc_mem_buf.size);
+	}
+	ssr_skipped_disconnect = 0;
+	i = bam_ops->sps_device_reset_ptr(a2_device_handle);
+	if (i)
+		pr_err("%s: device reset failed rc = %d\n", __func__,
+								i);
+	i = bam_ops->sps_connect_ptr(bam_tx_pipe, &tx_connection);
+	if (i)
+		pr_err("%s: tx connection failed rc = %d\n", __func__,
+								i);
+	i = bam_ops->sps_connect_ptr(bam_rx_pipe, &rx_connection);
+	if (i)
+		pr_err("%s: rx connection failed rc = %d\n", __func__,
+								i);
+	i = bam_ops->sps_register_event_ptr(bam_tx_pipe,
+			&tx_register_event);
+	if (i)
+		pr_err("%s: tx event reg failed rc = %d\n", __func__,
+								i);
+	i = bam_ops->sps_register_event_ptr(bam_rx_pipe,
+			&rx_register_event);
+	if (i)
+		pr_err("%s: rx event reg failed rc = %d\n", __func__,
+									i);
 	bam_connection_is_active = 1;
 
 	if (polling_mode)
@@ -1848,7 +1894,7 @@ static void disconnect_to_bam(void)
 		memset(rx_desc_mem_buf.base, 0, rx_desc_mem_buf.size);
 		memset(tx_desc_mem_buf.base, 0, tx_desc_mem_buf.size);
 		BAM_DMUX_LOG("%s: device reset\n", __func__);
-		bam_ops->sps_device_reset_ptr(a2_device_handle);
+		sps_device_reset(a2_device_handle);
 	} else {
 		ssr_skipped_disconnect = 1;
 	}
