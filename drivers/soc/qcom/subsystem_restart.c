@@ -127,7 +127,6 @@ struct restart_log {
  * @work: context for subsystem_restart_wq_func() for this device
  * @ssr_wlock: prevents suspend during subsystem_restart()
  * @wlname: name of wakeup source
- * @device_restart_work: work struct for device restart
  * @track: state tracking and locking
  * @notify: subsys notify handle
  * @dev: device
@@ -147,7 +146,6 @@ struct subsys_device {
 	struct work_struct work;
 	struct wakeup_source ssr_wlock;
 	char wlname[64];
-	struct work_struct device_restart_work;
 	struct subsys_tracking track;
 
 	void *notify;
