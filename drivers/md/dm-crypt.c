@@ -878,6 +878,10 @@ static void crypt_io_init(struct dm_crypt_io *io, struct crypt_config *cc,
 	io->base_bio = bio;
 	io->sector = sector;
 	io->error = 0;
+<<<<<<< HEAD
+=======
+	io->base_io = NULL;
+>>>>>>> dm crypt: fix cpu hotplug crash by removing per-cpu structure
 	io->ctx.req = NULL;
 	atomic_set(&io->io_pending, 0);
 }
@@ -902,6 +906,8 @@ static void crypt_dec_pending(struct dm_crypt_io *io)
 
 	if (io->ctx.req)
 		crypt_free_req(cc, io->ctx.req, base_bio);
+		mempool_free(io->ctx.req, cc->req_pool);
+	mempool_free(io, cc->io_pool);
 
 	bio_endio(base_bio, error);
 }
