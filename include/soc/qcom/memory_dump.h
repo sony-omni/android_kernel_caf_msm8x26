@@ -42,6 +42,45 @@ struct msm_dump_table {
 	struct msm_client_dump client_entries[MAX_NUM_CLIENTS];
 };
 
+#ifdef CONFIG_MSM_MEMORY_DUMP
+extern int msm_dump_tbl_register(struct msm_client_dump *client_entry);
+#else
+static inline int msm_dump_tbl_register(struct msm_client_dump *entry)
+{
+	return -EIO;
+}
+#endif
+
+
+#if defined(CONFIG_MSM_MEMORY_DUMP) || defined(CONFIG_MSM_MEMORY_DUMP_V2)
+extern uint32_t msm_dump_table_version(void);
+#else
+static inline uint32_t msm_dump_table_version(void)
+{
+	return 0;
+}
+#endif
+
+#define MSM_DUMP_MAKE_VERSION(ma, mi)	((ma << 20) | mi)
+#define MSM_DUMP_MAJOR(val)		(val >> 20)
+#define MSM_DUMP_MINOR(val)		(val & 0xFFFFF)
+
+
+#define MAX_NUM_ENTRIES		0x110
+
+enum msm_dump_data_ids {
+	MSM_DUMP_DATA_CPU_CTX = 0x00,
+	MSM_DUMP_DATA_L1_INST_CACHE = 0x60,
+	MSM_DUMP_DATA_L1_DATA_CACHE = 0x80,
+	MSM_DUMP_DATA_ETM_REG = 0xA0,
+	MSM_DUMP_DATA_L2_CACHE = 0xC0,
+	MSM_DUMP_DATA_L3_CACHE = 0xD0,
+	MSM_DUMP_DATA_OCMEM = 0xE0,
+	MSM_DUMP_DATA_TMC_ETF = 0xF0,
+	MSM_DUMP_DATA_TMC_REG = 0x100,
+	MSM_DUMP_DATA_MAX = MAX_NUM_ENTRIES,
+};
+
 struct msm_memory_dump {
 	unsigned long dump_table_phys;
 	struct msm_dump_table *dump_table_ptr;
