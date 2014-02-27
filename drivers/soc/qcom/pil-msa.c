@@ -325,7 +325,7 @@ int pil_mss_reset_load_mba(struct pil_desc *pil)
 	if (ret) {
 		dev_err(pil->dev, "Failed to locate %s\n",
 						fw_name_p);
-		goto err_request_firmware;
+		return ret;
 	}
 
 	mba_virt = dma_alloc_coherent(pil->dev, MBA_SIZE, &mba_phys,
