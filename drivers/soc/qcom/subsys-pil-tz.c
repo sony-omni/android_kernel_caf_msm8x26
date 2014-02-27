@@ -21,7 +21,6 @@
 #include <linux/interrupt.h>
 #include <linux/of_gpio.h>
 #include <linux/delay.h>
-
 #include <linux/msm-bus-board.h>
 #include <linux/msm-bus.h>
 
