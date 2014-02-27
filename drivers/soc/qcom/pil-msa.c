@@ -351,6 +351,8 @@ int pil_mss_reset_load_mba(struct pil_desc *pil)
 		goto err_mss_reset;
 	}
 
+	/* The MBA doesn't run from DDR, free the memory now. */
+	dma_free_coherent(pil->dev, MBA_SIZE, drv->mba_virt, drv->mba_phys);
 	release_firmware(fw);
 
 	return 0;
