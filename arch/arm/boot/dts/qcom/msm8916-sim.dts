@@ -34,6 +34,10 @@
 	interrupt-names = "core_irq";
 };
 
+&qcom_tzlog {
+	status = "okay";
+};
+
 &qcom_rng {
 	status = "okay";
 };
@@ -63,7 +67,7 @@
 
 	pinctrl-names = "active", "sleep";
 	pinctrl-0 = <&sdc1_clk_on &sdc1_cmd_on &sdc1_data_on>;
-	pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_on &sdc1_data_on>;
+	pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_off &sdc1_data_off>;
 
 	qcom,clk-rates = <400000 25000000 50000000 100000000 200000000>;
 	qcom,bus-speed-mode = "HS200_1p8v", "DDR_1p8v";
@@ -82,6 +86,7 @@
 			1 &intc 0 221 0
 			2 &msm_gpio 38 0>;
 	interrupt-names = "hc_irq", "pwr_irq", "status_irq";
+	cd-gpios = <&msm_gpio 38 0x1>;
 
 	vdd-supply = <&pm8916_l11>;
 	qcom,vdd-voltage-level = <1800000 2950000>;
@@ -92,10 +97,49 @@
 	qcom,vdd-io-current-level = <200 50000>;
 
 	pinctrl-names = "active", "sleep";
-	pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on>;
-	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_on &sdc2_data_on>;
+	pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off &sdc2_cd_off>;
 
 	qcom,clk-rates = <400000 25000000 50000000 100000000 200000000>;
 
 	status = "ok";
+};
+
+&pmx_mdss {
+		qcom,num-grp-pins = <3>;
+		qcom,pins = <&gp 24>, <&gp 25>, <&gp 98>;
+};
+
+&mdss_dsi0 {
+		pinctrl-names = "mdss_default", "mdss_sleep";
+		pinctrl-0 = <&mdss_dsi_active>;
+		pinctrl-1 = <&mdss_dsi_suspend>;
+
+		qcom,platform-enable-gpio = <&msm_gpio 24 0>;
+		qcom,platform-reset-gpio = <&msm_gpio 25 0>;
+		qcom,platform-bklight-en-gpio = <&msm_gpio 98 0>;
+};
+
+&soc {
+	i2c@78b9000 { /* BLSP1 QUP5 */
+		synaptics@20 {
+			compatible = "synaptics,rmi4";
+			reg = <0x20>;
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <13 0x2008>;
+			vdd-supply = <&pm8916_l17>;
+			vcc_i2c-supply = <&pm8916_l6>;
+			/* pins used by touchscreen */
+			pinctrl-names = "pmx_ts_active","pmx_ts_suspend";
+			pinctrl-0 = <&ts_int_active &ts_reset_active>;
+			pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+			synaptics,display-coords = <0 0 1079 1919>;
+			synaptics,panel-coords = <0 0 1079 2084>;
+			synaptics,irq-gpio = <&msm_gpio 13 0x2008>;
+			synaptics,reset-gpio = <&msm_gpio 12 0x0>;
+			synaptics,i2c-pull-up;
+			synaptics,power-down;
+			synaptics,disable-gpios;
+		};
+	};
 };
