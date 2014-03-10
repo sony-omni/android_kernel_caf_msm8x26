@@ -20,13 +20,6 @@
 		regulator-max-microvolt = <7>;
 	};
 
-	apc_vreg_corner: regulator-apc-corner {
-		compatible = "qcom,stub-regulator";
-		regulator-name = "apc_corner";
-		regulator-min-microvolt = <1>;
-		regulator-max-microvolt = <3>;
-	};
-
 	pm8916_s1_corner_ao: regulator-s1-corner_ao {
 		compatible = "qcom,stub-regulator";
 		regulator-name = "8916_s1_corner_ao";
@@ -61,7 +54,7 @@
 			status = "okay";
 			qcom,enable-time = <500>;
 			regulator-min-microvolt = <900000>;
-			regulator-max-microvolt = <1280000>;
+			regulator-max-microvolt = <1350000>;
 			qcom,system-load = <100000>;
 			regulator-always-on;
 		};
