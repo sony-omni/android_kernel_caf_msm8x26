@@ -20,10 +20,12 @@
 #include <linux/types.h>
 #include <linux/cpuidle.h>
 
-#ifdef CONFIG_SMP
+#if !defined(CONFIG_SMP)
+#define msm_secondary_startup NULL
+#elif defined(CONFIG_CPU_V7)
 extern void msm_secondary_startup(void);
 #else
-#define msm_secondary_startup NULL
+#define msm_secondary_startup secondary_entry
 #endif
 
 enum msm_pm_sleep_mode {
@@ -87,19 +89,6 @@ int msm_pm_sleep_mode_allow(unsigned int, unsigned int, bool);
  */
 int msm_pm_sleep_mode_supported(unsigned int, unsigned int, bool);
 
-enum msm_pm_pc_mode_type {
-	MSM_PM_PC_TZ_L2_INT,   /*Power collapse terminates in TZ;
-					integrated L2 cache controller */
-	MSM_PM_PC_NOTZ_L2_EXT, /* Power collapse doesn't terminate in
-					TZ; external L2 cache controller */
-	MSM_PM_PC_TZ_L2_EXT,   /* Power collapse terminates in TZ;
-					external L2 cache controller */
-};
-
-struct msm_pm_init_data_type {
-	enum msm_pm_pc_mode_type pc_mode;
-};
-
 struct msm_pm_cpr_ops {
 	void (*cpr_suspend)(void);
 	void (*cpr_resume)(void);
@@ -113,17 +102,19 @@ void msm_cpu_pm_enter_sleep(enum msm_pm_sleep_mode mode, bool from_idle);
 #ifdef CONFIG_MSM_PM
 void msm_pm_set_rpm_wakeup_irq(unsigned int irq);
 int msm_pm_wait_cpu_shutdown(unsigned int cpu);
-void __init msm_pm_sleep_status_init(void);
+int __init msm_pm_sleep_status_init(void);
 void msm_pm_set_l2_flush_flag(enum msm_pm_l2_scm_flag flag);
 void lpm_cpu_hotplug_enter(unsigned int cpu);
 s32 msm_cpuidle_get_deep_idle_latency(void);
+int msm_pm_collapse(unsigned long unused);
 #else
 static inline void msm_pm_set_rpm_wakeup_irq(unsigned int irq) {}
 static inline int msm_pm_wait_cpu_shutdown(unsigned int cpu) { return 0; }
-static inline void msm_pm_sleep_status_init(void) {};
+static inline int msm_pm_sleep_status_init(void) { return 0; };
 static inline void msm_pm_set_l2_flush_flag(unsigned int flag) { }
 static inline void lpm_cpu_hotplug_enter(unsigned int cpu) {};
 static inline s32 msm_cpuidle_get_deep_idle_latency(void) { return 0; }
+#define msm_pm_collapse NULL
 #endif
 
 #ifdef CONFIG_HOTPLUG_CPU
