@@ -568,7 +568,7 @@ static void pil_vote_load_worker(struct work_struct *work)
 	if (!IS_ERR_OR_NULL(peripheral) && !strcmp(peripheral, "modem")) {
 		vote_info->pil_handle = subsystem_get(peripheral);
 		if (IS_ERR(vote_info->pil_handle)) {
-			IPC_RTR_ERR("%s: Failed to load %s\n",
+			pr_err("%s: Failed to load %s\n",
 				__func__, peripheral);
 			vote_info->pil_handle = NULL;
 		}
