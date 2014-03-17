@@ -344,27 +344,45 @@ static void hsic_xprt_read_data(struct work_struct *work)
 		}
 		D("%s: Allocated rr_packet\n", __func__);
 
-		while (!skb) {
-			skb = alloc_skb(pdata->max_read_size, GFP_KERNEL);
-			if (skb)
-				break;
-			IPC_RTR_ERR("%s: Couldn't alloc SKB\n", __func__);
-			msleep(100);
-		}
-		pkt_size = pdata->read(hsic_xprtp->pdev, skb->data,
-					pdata->max_read_size);
-		if (pkt_size < 0) {
-			IPC_RTR_ERR("%s: Error %d @ read operation\n",
-				__func__, pkt_size);
-			kfree_skb(skb);
-			kfree(hsic_xprtp->in_pkt->pkt_fragment_q);
-			kfree(hsic_xprtp->in_pkt);
-			break;
-		}
-		skb_put(skb, pkt_size);
-		skb_queue_tail(hsic_xprtp->in_pkt->pkt_fragment_q, skb);
-		hsic_xprtp->in_pkt->length = pkt_size;
-		D("%s: Packet size read %d\n", __func__, pkt_size);
+		bytes_to_read = 0;
+		skb_size = pdata->max_read_size;
+		do {
+			do {
+				skb = alloc_skb(skb_size, GFP_KERNEL);
+				if (skb)
+					break;
+				IPC_RTR_ERR("%s: Couldn't alloc SKB\n",
+					    __func__);
+				msleep(100);
+			} while (!skb);
+			bytes_read = pdata->read(hsic_xprtp->pdev, skb->data,
+						 pdata->max_read_size);
+			if (bytes_read < 0) {
+				IPC_RTR_ERR("%s: Error %d @ read operation\n",
+					    __func__, bytes_read);
+				kfree_skb(skb);
+				goto out_read_data;
+			}
+			if (!bytes_to_read) {
+				bytes_to_read = ipc_router_peek_pkt_size(
+						skb->data);
+				if (bytes_to_read < 0) {
+					IPC_RTR_ERR("%s: Invalid size %d\n",
+						__func__, bytes_to_read);
+					kfree_skb(skb);
+					goto out_read_data;
+				}
+			}
+			bytes_to_read -= bytes_read;
+			skb_put(skb, bytes_read);
+			skb_queue_tail(hsic_xprtp->in_pkt->pkt_fragment_q, skb);
+			hsic_xprtp->in_pkt->length += bytes_read;
+			skb_size = min_t(uint32_t, pdata->max_read_size,
+					 (uint32_t)bytes_to_read);
+		} while (bytes_to_read > 0);
+
+		D("%s: Packet size read %d\n",
+		  __func__, hsic_xprtp->in_pkt->length);
 		msm_ipc_router_xprt_notify(&hsic_xprtp->xprt,
 			IPC_ROUTER_XPRT_EVENT_DATA, (void *)hsic_xprtp->in_pkt);
 		release_pkt(hsic_xprtp->in_pkt);
