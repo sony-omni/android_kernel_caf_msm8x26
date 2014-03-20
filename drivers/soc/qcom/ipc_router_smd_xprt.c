@@ -192,8 +192,7 @@ static int msm_ipc_router_smd_remote_write(void *data,
 			return -ENETRESET;
 		}
 		spin_unlock_irqrestore(&smd_xprtp->ss_reset_lock, flags);
-		ret = smd_write_start(smd_xprtp->channel, len);
-		if (ret < 0 && num_retries >= 5) {
+		if (num_retries >= 5) {
 			IPC_RTR_ERR("%s: Error %d @smd_write_start for %s\n",
 				__func__, ret, xprt->name);
 			return ret;
@@ -296,6 +295,18 @@ static void smd_xprt_read_data(struct work_struct *work)
 					__func__);
 				return;
 			}
+
+			smd_xprtp->in_pkt->pkt_fragment_q =
+				kmalloc(sizeof(struct sk_buff_head),
+					GFP_KERNEL);
+			if (!smd_xprtp->in_pkt->pkt_fragment_q) {
+				IPC_RTR_ERR(
+				"%s: Couldn't alloc pkt_fragment_q\n",
+					__func__);
+				kfree(smd_xprtp->in_pkt);
+				return;
+			}
+			skb_queue_head_init(smd_xprtp->in_pkt->pkt_fragment_q);
 			smd_xprtp->is_partial_in_pkt = 1;
 			D("%s: Allocated rr_packet\n", __func__);
 		}
@@ -568,7 +579,7 @@ static void pil_vote_load_worker(struct work_struct *work)
 	if (!IS_ERR_OR_NULL(peripheral) && !strcmp(peripheral, "modem")) {
 		vote_info->pil_handle = subsystem_get(peripheral);
 		if (IS_ERR(vote_info->pil_handle)) {
-			pr_err("%s: Failed to load %s\n",
+			IPC_RTR_ERR("%s: Failed to load %s\n",
 				__func__, peripheral);
 			vote_info->pil_handle = NULL;
 		}
