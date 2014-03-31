@@ -783,8 +783,6 @@ static DEFINE_CLK_BRANCH_VOTER(cxo_pil_lpass_clk, &xo_clk_src.c);
 static struct clk_voter branch_ce1_clk_src;
 static struct clk_voter branch_ce2_clk_src;
 
-struct clk_ops clk_ops_vote_lpass;
-
 static unsigned int soft_vote_gpll0;
 
 static struct pll_vote_clk gpll0_ao_clk_src = {
