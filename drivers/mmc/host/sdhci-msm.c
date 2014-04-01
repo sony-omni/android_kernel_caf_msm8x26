@@ -867,7 +867,6 @@ out:
 	return ret;
 }
 
-<<<<<<< HEAD
 static int sdhci_msm_cm_dll_sdc4_calibration(struct sdhci_host *host)
 {
 	u32 dll_status;
@@ -948,8 +947,6 @@ out:
 	return ret;
 }
 
-=======
->>>>>>> mmc: sdhci-msm: improve tuning process
 static void sdhci_msm_set_mmc_drv_type(struct sdhci_host *host, u32 opcode,
 		u8 drv_type)
 {
@@ -1091,12 +1088,8 @@ retry:
 		}
 	} while (++phase < 16);
 
-<<<<<<< HEAD
 	if ((tuned_phase_cnt == NUM_TUNING_PHASES) &&
 			card && mmc_card_mmc(card)) {
-=======
-	if ((tuned_phase_cnt == NUM_TUNING_PHASES) && mmc_card_mmc(card)) {
->>>>>>> mmc: sdhci-msm: improve tuning process
 		/*
 		 * If all phases pass then its a problem. So change the card's
 		 * drive type to a different value, if supported and repeat
