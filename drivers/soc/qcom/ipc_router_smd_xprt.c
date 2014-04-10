@@ -295,18 +295,6 @@ static void smd_xprt_read_data(struct work_struct *work)
 					__func__);
 				return;
 			}
-
-			smd_xprtp->in_pkt->pkt_fragment_q =
-				kmalloc(sizeof(struct sk_buff_head),
-					GFP_KERNEL);
-			if (!smd_xprtp->in_pkt->pkt_fragment_q) {
-				IPC_RTR_ERR(
-				"%s: Couldn't alloc pkt_fragment_q\n",
-					__func__);
-				kfree(smd_xprtp->in_pkt);
-				return;
-			}
-			skb_queue_head_init(smd_xprtp->in_pkt->pkt_fragment_q);
 			smd_xprtp->is_partial_in_pkt = 1;
 			D("%s: Allocated rr_packet\n", __func__);
 		}
