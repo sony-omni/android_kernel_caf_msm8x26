@@ -200,6 +200,82 @@
 				drive-strength = <2>; /* 2 MA */
 				bias-disable = <0>; /* No PULL */
 			};
+			/*suspended state */
+			cam_sensor_front_sleep: sleep {
+				drive-strength = <2>; /* 2 MA */
+				bias-pull-down = <0>; /* PULL DOWN */
+			};
+		};
+
+		pmx_i2c_4 {
+			/* CLK, DATA */
+			qcom,pins = <&gp 14>, <&gp 15>;
+			qcom,num-grp-pins = <2>;
+			qcom,pin-func = <2>;
+			label = "pmx_i2c_4";
+
+			i2c_4_active: i2c_4_active {
+				drive-strength = <2>;	/* 2 MA */
+				bias-disable = <0>;	/* No PULL */
+			};
+
+			i2c_4_sleep: i2c_4_sleep {
+				drive-strength = <2>;	/* 2 MA */
+				bias-disable = <0>;	/* No PULL */
+			};
+
+		};
+
+		smb_int_pin {
+			qcom,pins = <&gp 62>;
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <0>;
+			label = "smb1360_int_gpio";
+			smb_int_active: smb_int_active {
+				drive-strength = <2>;	/* 2 MA */
+				bias-pull-up;		/* PULL UP*/
+			};
+		};
+
+		button_backlight_pin {
+			qcom,pins = <&gp 119>;
+			qcom,num-grp-pins = <1>;
+			qcom,pin-func = <0>;
+			label = "button-backlight-pin";
+			button_backlight_off: button_backlight_off {
+				drive-strength = <2>;
+				bias-disable;
+				output-low;
+			};
+		};
+
+		mpu6050_int_pin {
+			qcom,pins = <&gp 115>;
+			qcom,pin-func = <0>;
+			qcom,num-grp-pins = <1>;
+			label = "mpu6050-irq";
+			mpu6050_default: mpu6050_default {
+				drive-strength = <6>;
+				bias-pull-up;
+			};
+			mpu6050_sleep: mpu6050_sleep {
+				drive-strength = <2>;
+			};
+		};
+
+		apds99xx_int_pin {
+			qcom,pins = <&gp 113>;
+			qcom,pin-func = <0>;
+			qcom,num-grp-pins = <1>;
+			label = "apds99xx-irq";
+			apds99xx_default: apds99xx_default {
+				drive-strength = <6>;
+				bias-pull-up;
+			};
+			apds99xx_sleep: apds99xx_sleep {
+				drive-strength = <2>;
+				bias-pull-down;
+			};
 		};
 	};
 };
