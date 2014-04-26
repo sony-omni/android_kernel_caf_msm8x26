@@ -19,6 +19,7 @@
 #include <soc/qcom/spm.h>
 #include <soc/qcom/pm.h>
 #include <soc/qcom/scm-boot.h>
+#include <soc/qcom/cpu_pwr_ctl.h>
 
 #include <asm/cacheflush.h>
 #include <asm/cputype.h>
@@ -315,10 +316,32 @@ int __cpuinit msm8962_boot_secondary(unsigned int cpu, struct task_struct *idle)
 
 	if (per_cpu(cold_boot_done, cpu) == false) {
 		if (of_board_is_sim())
-			release_secondary_sim(APCS_ALIAS0_BASE_ADDR, cpu);
+			release_secondary_sim(0xb088000, cpu);
 		else if (!of_board_is_rumi())
-			msm8962_release_secondary(APCS_ALIAS0_BASE_ADDR, cpu);
+			arm_release_secondary(0xb088000, cpu);
 
+		per_cpu(cold_boot_done, cpu) = true;
+	}
+	return release_from_pen(cpu);
+}
+
+static int __cpuinit msm8936_boot_secondary(unsigned int cpu,
+						struct task_struct *idle)
+{
+	int ret = 0;
+
+	pr_debug("Starting secondary CPU %d\n", cpu);
+
+	if (per_cpu(cold_boot_done, cpu) == false) {
+		if (of_board_is_sim()) {
+			ret = msm_unclamp_secondary_arm_cpu_sim(cpu);
+			if (ret)
+				return ret;
+		} else if (!of_board_is_rumi()) {
+			ret = msm_unclamp_secondary_arm_cpu(cpu);
+			if (ret)
+				return ret;
+		}
 		per_cpu(cold_boot_done, cpu) = true;
 	}
 	return release_from_pen(cpu);
