@@ -3149,11 +3149,10 @@ static struct clk_lookup msm_clocks_8610[] = {
 	CLK_LOOKUP("scm_bus_clk",  gcc_ce1_axi_clk.c, "fb21b000.qcom,pronto"),
 	CLK_LOOKUP("scm_core_clk_src", ce1_clk_src.c, "fb21b000.qcom,pronto"),
 
-	/* GUD Clocks */
-	CLK_LOOKUP("core_clk",     gcc_ce1_clk.c,      "mcd"),
-	CLK_LOOKUP("iface_clk",    gcc_ce1_ahb_clk.c,  "mcd"),
-	CLK_LOOKUP("bus_clk",      gcc_ce1_axi_clk.c,  "mcd"),
-	CLK_LOOKUP("core_clk_src", ce1_clk_src.c,      "mcd"),
+	CLK_LOOKUP("scm_core_clk", gcc_ce1_clk.c, "fb21b000.qcom,pronto"),
+	CLK_LOOKUP("scm_iface_clk", gcc_ce1_ahb_clk.c, "fb21b000.qcom,pronto"),
+	CLK_LOOKUP("scm_bus_clk",  gcc_ce1_axi_clk.c, "fb21b000.qcom,pronto"),
+	CLK_LOOKUP("scm_core_clk_src", ce1_clk_src.c, "fb21b000.qcom,pronto"),
 
 	/* Add QCEDEV clocks */
 	CLK_LOOKUP("core_clk",     gcc_ce1_clk.c,      "fd400000.qcom,qcedev"),

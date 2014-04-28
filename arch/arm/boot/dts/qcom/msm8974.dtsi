@@ -2191,15 +2191,15 @@
 					"scm_core_clk_src";
 		qcom,scm_core_clk_src-freq = <50000000>;
 
-		qcom,msm-bus,name = "pil-venus";
-		qcom,msm-bus,num-cases = <2>;
-		qcom,msm-bus,num-paths = <1>;
-		qcom,msm-bus,vectors-KBps =
-				<63 512 0 0>,
-				<63 512 0 304000>;
+		clock-names = "core_clk", "iface_clk", "bus_clk", "mem_clk",
+				"scm_core_clk", "scm_iface_clk", "scm_bus_clk",
+				"scm_core_clk_src";
+		qcom,proxy-clock-names = "core_clk", "iface_clk", "bus_clk",
+					"mem_clk", "scm_core_clk",
+					"scm_iface_clk", "scm_bus_clk",
+					"scm_core_clk_src";
+		qcom,scm_core_clk_src-freq = <50000000>;
 
-		qcom,pas-id = <9>;
-		qcom,proxy-timeout-ms = <2000>;
 		qcom,firmware-name = "venus";
 	};
 
