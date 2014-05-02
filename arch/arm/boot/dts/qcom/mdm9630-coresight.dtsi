@@ -129,6 +129,7 @@
 		coresight-outports = <0>;
 		coresight-child-list = <&funnel_in1>;
 		coresight-child-ports = <2>;
+		coresight-etm-cpu = <&CPU0>;
 
 		qcom,round-robin;
 	};
