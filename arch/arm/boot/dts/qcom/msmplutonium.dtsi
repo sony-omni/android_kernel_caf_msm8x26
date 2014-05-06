@@ -216,6 +216,60 @@
 		};
 	};
 
+	qcom,wdt@f9017000 {
+		compatible = "qcom,msm-watchdog";
+		reg = <0xf9017000 0x1000>;
+		reg-names = "wdt-base";
+		interrupts = <0 3 0>, <0 4 0>;
+		qcom,bark-time = <11000>;
+		qcom,pet-time = <10000>;
+		qcom,ipi-ping;
+	};
+
+	qcom,msm-rtb {
+		compatible = "qcom,msm-rtb";
+		qcom,rtb-size = <0x100000>;
+	};
+
+	rpm_bus: qcom,rpm-smd {
+		compatible = "qcom,rpm-smd";
+		rpm-channel-name = "rpm_requests";
+		rpm-channel-type = <15>; /* SMD_APPS_RPM */
+		rpm-standalone; /* TODO: remove this after bring up */
+	};
+
+	qcom,rpm-log@fc19dc00 {
+		compatible = "qcom,rpm-log";
+		reg = <0xfc19dc00 0x4000>;
+		qcom,rpm-addr-phys = <0xfc000000>;
+		qcom,offset-version = <4>;
+		qcom,offset-page-buffer-addr = <36>;
+		qcom,offset-log-len = <40>;
+		qcom,offset-log-len-mask = <44>;
+		qcom,offset-page-indices = <56>;
+	};
+
+	qcom,rpm-stats@fc19dba0 {
+		compatible = "qcom,rpm-stats";
+		reg = <0xfc19dba0 0x1000>;
+		reg-names = "phys_addr_base";
+		qcom,sleep-stats-version = <2>;
+	};
+
+	qcom,msm-rng@f9bff000 {
+		compatible = "qcom,msm-rng";
+		reg = <0xf9bff000 0x200>;
+		qcom,msm-bus,name = "msm-rng-noc";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<88 618 0 0>,
+				<88 618 0 800>;
+		qcom,msm-rng-iface-clk;
+		clocks = <&clock_gcc clk_gcc_prng_ahb_clk>;
+		clock-names = "iface_clk";
+        };
+
 	sdhc_1: sdhci@f9824900 {
 				compatible = "qcom,sdhci-msm";
 				reg = <0xf9824900 0x1a0>, <0xf9824000 0x800>;
