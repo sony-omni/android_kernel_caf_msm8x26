@@ -90,7 +90,6 @@ struct mdm_ctrl {
 	bool debug_fail;
 	unsigned int dump_timeout_ms;
 	unsigned int ramdump_delay_ms;
-	int sysmon_subsys_id;
 	struct esoc_clink *esoc;
 	bool get_restart_reason;
 	unsigned long irq_mask;
@@ -326,7 +325,9 @@ static int mdm_cmd_exe(enum esoc_cmd cmd, struct esoc_clink *esoc)
 		mdm_disable_irqs(mdm);
 		mdm->debug = 0;
 		mdm->ready = false;
-		ret = sysmon_send_shutdown(mdm->sysmon_subsys_id);
+		mdm->trig_cnt = 0;
+
+		ret = sysmon_send_shutdown(esoc->subsys.name);
 		if (ret)
 			dev_err(mdm->dev, "Graceful shutdown fail, ret = %d\n",
 									ret);
@@ -440,7 +441,7 @@ static void mdm_get_restart_reason(struct work_struct *work)
 	struct device *dev = mdm->dev;
 
 	do {
-		ret = sysmon_get_reason(mdm->sysmon_subsys_id, sfr_buf,
+		ret = sysmon_get_reason(mdm->esoc->subsys.name, sfr_buf,
 							sizeof(sfr_buf));
 		if (!ret) {
 			dev_err(dev, "mdm restart reason is %s\n", sfr_buf);
@@ -713,10 +714,6 @@ static int mdm_configure_ipc(struct mdm_ctrl *mdm, struct platform_device *pdev)
 			goto fatal_err;
 		}
 	}
-	ret = of_property_read_u32(node, "qcom,sysmon-subsys-id",
-						&mdm->sysmon_subsys_id);
-	if (ret < 0)
-		dev_dbg(dev, "sysmon_subsys_id not set.\n");
 
 	gpio_direction_output(MDM_GPIO(mdm, AP2MDM_STATUS), 0);
 	gpio_direction_output(MDM_GPIO(mdm, AP2MDM_ERRFATAL), 0);
