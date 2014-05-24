@@ -119,12 +119,19 @@ config ARCH_VEXPRESS
 
 config ARCH_MSM
 	bool "Qualcomm Platforms"
+	select ARCH_REQUIRE_GPIOLIB
+	select CLKDEV_LOOKUP
 	select HAVE_CLK
 	select HAVE_CLK_PREPARE
-	select CLKDEV_LOOKUP
-	select ARCH_REQUIRE_GPIOLIB
-	select SOC_BUS
+	select MSM_IRQ
 	select PINCTRL
+	select SOC_BUS
+	select PCI
+	select ARCH_HAS_CPUFREQ
+	select CPU_FREQ_MSM
+	select PM_DEVFREQ
+	select MSM_DEVFREQ_CPUBW
+	select DEVFREQ_SIMPLE_DEV
 	help
 	  This enables support for the ARMv8 based Qualcomm chipsets.
 
@@ -135,12 +142,35 @@ config ARCH_MSM8916
 	  This enables support for the MSM8916 chipset. If you dont
 	  know what do here, say N
 
-config ARCH_MSMPLUTONIUM
-	bool "Enable Support for Qualcomm MSMPLUTONIUM"
+config ARCH_MSM8994
+	bool "Enable Support for Qualcomm MSM8994"
 	depends on ARCH_MSM
 	help
-	  This enables support for the MSMPLUTONIUM chipset. If you dont
+	  This enables support for the MSM8994 chipset. If you dont
 	  know what do here, say N
+
+config ARCH_MSM8994_V1_TLBI_WA
+	bool "Enable MSM8994 v1 TLBI workaround"
+	depends on ARCH_MSM8994
+	help
+	  This enables support for the MSM8994 v1 TLBI workaround. This
+	  workaround is required for MSM8994 V1 revision where the
+	  [39:38] bits of VA are tied to zero and due to which TLBI
+	  operations with VA or ASID will not work.
+
+config MSM8994_V1_PMUIRQ_WA
+	bool "Enable MSM8994 v1 PMU-CTI IRQ workaround"
+	depends on ARCH_MSM8994 && CORESIGHT_CTI
+	help
+	  This enables support for the MSM8994 v1 PMU-CTI IRQ workaround.
+	  This workaround is required for MSM8994 V1 revision where the
+	  percpu PMU interrupt is incorrectly connected to the corresponding
+	  CPUs in the other cluster.
+
+config ARCH_XGENE
+	bool "AppliedMicro X-Gene SOC Family"
+	help
+	  This enables support for AppliedMicro X-Gene SOC Family
 
 endmenu
 
