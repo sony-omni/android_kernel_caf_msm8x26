@@ -10,41 +10,36 @@
  * GNU General Public License for more details.
  */
 
-#include "msm8916.dtsi"
-#include "msm8916-pinctrl.dtsi"
-
-/ {
-	aliases {
-		serial0 = &blsp1_uart2;
-	};
-};
+#include "msm8939.dtsi"
+#include "msm8939-pinctrl.dtsi"
+#include "msm8939-camera-sensor-mtp.dtsi"
 
 &soc {
 	i2c@78b9000 { /* BLSP1 QUP5 */
 		synaptics@20 {
-			compatible = "synaptics,rmi4";
+			compatible = "synaptics,dsx";
 			reg = <0x20>;
 			interrupt-parent = <&msm_gpio>;
 			interrupts = <13 0x2008>;
-			vdd-supply = <&pm8916_l17>;
-			vcc_i2c-supply = <&pm8916_l6>;
+			avdd-supply = <&pm8916_l17>;
+			vdd-supply = <&pm8916_l6>;
 			/* pins used by touchscreen */
 			pinctrl-names = "pmx_ts_active","pmx_ts_suspend";
 			pinctrl-0 = <&ts_int_active &ts_reset_active>;
 			pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
-			synaptics,display-coords = <0 0 1079 1919>;
-			synaptics,panel-coords = <0 0 1079 2084>;
 			synaptics,irq-gpio = <&msm_gpio 13 0x2008>;
 			synaptics,reset-gpio = <&msm_gpio 12 0x0>;
 			synaptics,i2c-pull-up;
 			synaptics,power-down;
 			synaptics,disable-gpios;
+			synaptics,display-coords = <0 0 1079 1919>;
+			synaptics,panel-coords = <0 0 1079 2084>;
 		};
 	};
 
 	gen-vkeys {
 		compatible = "qcom,gen-vkeys";
-		label = "synaptics_rmi4_i2c";
+		label = "synaptics_dsx";
 		qcom,disp-maxx = <1079>;
 		qcom,disp-maxy = <1919>;
 		qcom,panel-maxx = <1079>;
@@ -52,23 +47,38 @@
 		qcom,key-codes = <158 139 172 217>;
 	};
 
-	i2c@78ba000 { /* BLSP1 QUP6 */
-		nfc-nci@e {
-			compatible = "qcom,nfc-nci";
-			reg = <0x0e>;
-			qcom,irq-gpio = <&msm_gpio 21 0x00>;
-			qcom,dis-gpio = <&msm_gpio 20 0x00>;
-			qcom,clk-src = "BBCLK2";
-			qcom,clk-en-gpio = <&msm_gpio 0 0x00>;
-			interrupt-parent = <&msm_gpio>;
-			interrupts = <21 0>;
-			interrupt-names = "nfc_irq";
-			pinctrl-names = "nfc_active","nfc_suspend";
-			pinctrl-0 = <&nfc_int_active &nfc_disable_active>;
-			pinctrl-1 = <&nfc_int_suspend &nfc_disable_suspend>;
-			qcom,clk-gpio = <&pm8916_gpios 2 0>;
-			clocks = <&clock_rpm clk_bb_clk2_pin>;
-			clock-names = "ref_clk";
+	gpio_keys {
+		compatible = "gpio-keys";
+		input-name = "gpio-keys";
+		pinctrl-names = "tlmm_gpio_key_active","tlmm_gpio_key_suspend";
+		pinctrl-0 = <&gpio_key_active>;
+		pinctrl-1 = <&gpio_key_suspend>;
+
+		camera_focus {
+			label = "camera_focus";
+			gpios = <&msm_gpio 108 0x1>;
+			linux,input-type = <1>;
+			linux,code = <0x210>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
+
+		camera_snapshot {
+			label = "camera_snapshot";
+			gpios = <&msm_gpio 109 0x1>;
+			linux,input-type = <1>;
+			linux,code = <0x2fe>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
+
+		vol_up {
+			label = "volume_up";
+			gpios = <&msm_gpio 107 0x1>;
+			linux,input-type = <1>;
+			linux,code = <115>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
 		};
 	};
 
@@ -83,6 +93,7 @@
 			interrupts = <115 0x2>;
 			vdd-supply = <&pm8916_l17>;
 			vlogic-supply = <&pm8916_l16>;
+			vi2c-supply = <&pm8916_l6>;
 			invn,gpio-int = <&msm_gpio 115 0x2>;
 			invn,place = "Portrait Down Back Side";
 		};
@@ -107,16 +118,29 @@
 			avago,als-D = <142>;
 			avago,ga-value = <48>;
 		};
-	};
 
-	sound {
+		akm@c {
+			compatible = "ak,ak8963";
+			reg = <0x0c>;
+			pinctrl-names = "ak8963_default", "ak8963_sleep";
+			pinctrl-0 = <&ak8963_default>;
+			pinctrl-1 = <&ak8963_sleep>;
+			interrupt-parent = <&msm_gpio>;
+			interrupts = <69 0x2>;
+			vdd-supply = <&pm8916_l17>;
+			vio-supply = <&pm8916_l6>;
+			ak,layout = <0x6>;
+			ak,auto-report;
+		};
+
+	};
+       sound {
 		compatible = "qcom,msm8x16-audio-codec";
-		qcom,model = "msm8x16-snd-card";
+		qcom,model = "msm8939-snd-card-mtp";
 		qcom,msm-snd-card-id = <0>;
 		qcom,msm-codec-type = "internal";
 		qcom,msm-mbhc-hphl-swh = <0>;
 		qcom,msm-mbhc-gnd-swh = <0>;
-		qcom,msm-hs-micbias-type = "internal";
 		qcom,audio-routing =
 			"RX_BIAS", "MCLK",
 			"SPK_RX_BIAS", "MCLK",
@@ -136,7 +160,7 @@
 		pinctrl-2 = <&cross_conn_det_act>;
 		pinctrl-3 = <&cross_conn_det_sus>;
 		qcom,cdc-us-euro-gpios = <&msm_gpio 120 0>;
-	};
+       };
 };
 
 &blsp1_uart2 {
@@ -223,7 +247,6 @@
 &pm8916_chg {
 	status = "ok";
 	qcom,charging-disabled;
-	qcom,disable-follow-on-reset;
 };
 
 &qcom_tzlog {
