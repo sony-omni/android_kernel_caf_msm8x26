@@ -4844,6 +4844,15 @@ static void hub_events(void)
 		} else {
 			usb_get_dev(hub->hdev);
 		}
+		spin_unlock_irq(&hub_event_lock);
+
+		/* make sure hdev is not freed before accessing it */
+		if (hub->disconnected) {
+			spin_unlock_irq(&hub_event_lock);
+			goto hub_disconnected;
+		} else {
+			usb_get_dev(hub->hdev);
+		}
 		hdev = hub->hdev;
 		usb_get_dev(hdev);
 		spin_unlock_irq(&hub_event_lock);
