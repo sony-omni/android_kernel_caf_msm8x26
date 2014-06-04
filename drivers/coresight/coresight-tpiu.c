@@ -106,7 +106,12 @@ struct tpiu_drvdata {
 	bool			nidnt;
 };
 
-struct gpiomux_setting old_cfg;
+static int nidnt_boot_hw_detect;
+module_param_named(nidnt_boot_hw_detect,
+	nidnt_boot_hw_detect, int, S_IRUGO | S_IWUSR | S_IWGRP);
+
+static void __tpiu_disable(struct tpiu_drvdata *drvdata);
+static void __tpiu_disable_to_sdc(struct tpiu_drvdata *drvdata);
 
 static void tpiu_flush_and_stop(struct tpiu_drvdata *drvdata)
 {
