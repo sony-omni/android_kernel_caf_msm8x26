@@ -198,7 +198,8 @@ static int msm_ipc_router_smd_remote_write(void *data,
 			return -ENETRESET;
 		}
 		spin_unlock_irqrestore(&smd_xprtp->ss_reset_lock, flags);
-		if (num_retries >= 5) {
+		ret = smd_write_start(smd_xprtp->channel, len);
+		if (ret < 0 && num_retries >= 5) {
 			IPC_RTR_ERR("%s: Error %d @smd_write_start for %s\n",
 				__func__, ret, xprt->name);
 			return ret;
