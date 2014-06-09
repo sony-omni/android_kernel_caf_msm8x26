@@ -3232,6 +3232,15 @@ static bool adreno_is_hw_collapsible(struct kgsl_device *device)
 				gpudev->is_sptp_idle(adreno_dev) : true);
 }
 
+static bool adreno_is_hw_collapsible(struct kgsl_device *device)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct adreno_gpudev *gpudev  = ADRENO_GPU_DEVICE(adreno_dev);
+
+	return adreno_isidle(device) && (gpudev->is_sptp_idle ?
+				gpudev->is_sptp_idle(adreno_dev) : true);
+}
+
 static const struct kgsl_functable adreno_functable = {
 	/* Mandatory functions */
 	.regread = adreno_regread,
