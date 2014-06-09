@@ -2703,6 +2703,7 @@ bool adreno_hw_isidle(struct kgsl_device *device)
 {
 	unsigned int reg_rbbm_status;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
 
 	adreno_readreg(adreno_dev, ADRENO_REG_RBBM_STATUS,
 		&reg_rbbm_status);
@@ -3213,6 +3214,15 @@ static bool adreno_is_hw_collapsible(struct kgsl_device *device)
 				gpudev->is_sptp_idle(adreno_dev) : true);
 }
 
+static bool adreno_is_hw_collapsible(struct kgsl_device *device)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct adreno_gpudev *gpudev  = ADRENO_GPU_DEVICE(adreno_dev);
+
+	return adreno_isidle(device) && (gpudev->is_sptp_idle ?
+				gpudev->is_sptp_idle(adreno_dev) : true);
+}
+
 static const struct kgsl_functable adreno_functable = {
 	/* Mandatory functions */
 	.regread = adreno_regread,
@@ -3243,6 +3253,11 @@ static const struct kgsl_functable adreno_functable = {
 	.setproperty = adreno_setproperty,
 	.drawctxt_sched = adreno_drawctxt_sched,
 	.resume = adreno_dispatcher_start,
+	.enable_pc = adreno_enable_pc,
+	.disable_pc = adreno_disable_pc,
+	.regulator_enable = adreno_regulator_enable,
+	.is_hw_collapsible = adreno_is_hw_collapsible,
+
 };
 
 static struct platform_driver adreno_platform_driver = {
