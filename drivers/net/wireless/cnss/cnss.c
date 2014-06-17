@@ -937,6 +937,52 @@ int cnss_get_wlan_unsafe_channel(u16 *unsafe_ch_list,
 }
 EXPORT_SYMBOL(cnss_get_wlan_unsafe_channel);
 
+int cnss_wlan_set_dfs_nol(void *info, u16 info_len)
+{
+	void *temp;
+
+	if (!penv)
+		return -ENODEV;
+
+	if (!info || !info_len)
+		return -EINVAL;
+
+	temp = kmalloc(info_len, GFP_KERNEL);
+	if (!temp)
+		return -ENOMEM;
+
+	memcpy(temp, info, info_len);
+
+	kfree(penv->dfs_nol_info);
+
+	penv->dfs_nol_info = temp;
+	penv->dfs_nol_info_len = info_len;
+
+	return 0;
+}
+EXPORT_SYMBOL(cnss_wlan_set_dfs_nol);
+
+int cnss_wlan_get_dfs_nol(void *info, u16 info_len)
+{
+	int len;
+
+	if (!penv)
+		return -ENODEV;
+
+	if (!info || !info_len)
+		return -EINVAL;
+
+	if (penv->dfs_nol_info == NULL || penv->dfs_nol_info_len == 0)
+		return -ENOENT;
+
+	len = min(info_len, penv->dfs_nol_info_len);
+
+	memcpy(info, penv->dfs_nol_info, len);
+
+	return len;
+}
+EXPORT_SYMBOL(cnss_wlan_get_dfs_nol);
+
 void cnss_pm_wake_lock_init(struct wakeup_source *ws, const char *name)
 {
 	wakeup_source_init(ws, name);
@@ -967,17 +1013,19 @@ void cnss_pm_wake_lock_destroy(struct wakeup_source *ws)
 }
 EXPORT_SYMBOL(cnss_pm_wake_lock_destroy);
 
-void cnss_lock_pm_sem(void)
+#ifdef CONFIG_PCI_MSM
+int cnss_wlan_pm_control(bool vote)
 {
-	down_read(&cnss_pm_sem);
-}
-EXPORT_SYMBOL(cnss_lock_pm_sem);
+	if (!penv || !penv->pdev)
+		return -ENODEV;
 
-void cnss_release_pm_sem(void)
-{
-	up_read(&cnss_pm_sem);
+	return msm_pcie_pm_control(
+		vote ? MSM_PCIE_DISABLE_PC : MSM_PCIE_ENABLE_PC,
+		cnss_get_pci_dev_bus_number(penv->pdev),
+		penv->pdev, NULL, PM_OPTIONS);
 }
-EXPORT_SYMBOL(cnss_release_pm_sem);
+EXPORT_SYMBOL(cnss_wlan_pm_control);
+#endif
 
 void cnss_flush_work(void *work)
 {
@@ -998,6 +1046,12 @@ void cnss_get_monotonic_boottime(struct timespec *ts)
 	get_monotonic_boottime(ts);
 }
 EXPORT_SYMBOL(cnss_get_monotonic_boottime);
+
+void cnss_get_boottime(struct timespec *ts)
+{
+	ktime_get_ts(ts);
+}
+EXPORT_SYMBOL(cnss_get_boottime);
 
 int cnss_get_ramdump_mem(unsigned long *address, unsigned long *size)
 {
