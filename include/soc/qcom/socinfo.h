@@ -74,6 +74,10 @@
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msmsamarium")
 #define early_machine_is_msmplutonium()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msmplutonium")
+#define early_machine_is_msm8994()	\
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msm8994")
+#define early_machine_is_msm8992()	\
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msm8992")
 #else
 #define of_board_is_sim()		0
 #define of_board_is_rumi()		0
@@ -154,6 +158,8 @@ enum msm_cpu {
 	MSM_CPU_SAMARIUM,
 	MSM_CPU_ZIRC,
 	MSM_CPU_PLUTONIUM,
+	MSM_CPU_8994,
+	MSM_CPU_8992,
 };
 
 struct msm_soc_info {
