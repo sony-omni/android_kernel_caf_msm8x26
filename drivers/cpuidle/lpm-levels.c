@@ -910,6 +910,9 @@ unlock_and_return:
 void lpm_cpu_hotplug_enter(unsigned int cpu)
 {
 	enum msm_pm_sleep_mode mode = MSM_PM_SLEEP_MODE_NR;
+	struct lpm_cluster *cluster = per_cpu(cpu_cluster, cpu);
+	int i;
+	int idx = -1;
 
 	/*
 	 * If lpm isn't probed yet, try to put cpu into the one of the modes
