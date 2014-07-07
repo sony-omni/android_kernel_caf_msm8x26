@@ -38,6 +38,7 @@
 #include <linux/msm-sps.h>
 #include <mach/usb_bam.h>
 #include <soc/qcom/memory_dump.h>
+#include <soc/qcom/jtag.h>
 
 #include "coresight-priv.h"
 
@@ -179,6 +180,13 @@ struct tmc_drvdata {
 	char			*byte_cntr_node;
 	uint32_t		mem_size;
 	bool			sticky_enable;
+	bool			sg_enable;
+	enum tmc_etr_mem_type	mem_type;
+	enum tmc_etr_mem_type	memtype;
+	uint32_t		delta_bottom;
+	int			sg_blk_num;
+	bool			notify;
+	struct notifier_block	jtag_save_blk;
 };
 
 static void tmc_wait_for_flush(struct tmc_drvdata *drvdata)
@@ -223,6 +231,46 @@ static void tmc_flush_and_stop(struct tmc_drvdata *drvdata)
 	     tmc_readl(drvdata, TMC_FFCR));
 
 	tmc_wait_for_ready(drvdata);
+}
+
+static int tmc_flush_on_powerdown(struct notifier_block *this,
+				  unsigned long event, void *ptr)
+{
+	struct tmc_drvdata *drvdata = container_of(this, struct tmc_drvdata,
+						   jtag_save_blk);
+	int count;
+	uint8_t stopbit;
+	unsigned long flags;
+	uint32_t ffcr;
+
+	spin_lock_irqsave(&drvdata->spinlock, flags);
+	/*
+	 * Current implementation performs flush operation on all TMC devices
+	 * that are enabled irrespective of the current sink.
+	 */
+	if (!drvdata->enable)
+		goto out;
+	ffcr = tmc_readl(drvdata, TMC_FFCR);
+	stopbit = BVAL(ffcr, 12);
+	/* Do not stop trace on flush */
+	ffcr = ffcr & ~BIT(12);
+	tmc_writel(drvdata, ffcr, TMC_FFCR);
+	/* Generate manual flush */
+	ffcr = ffcr | BIT(6);
+	tmc_writel(drvdata, ffcr, TMC_FFCR);
+	/* Ensure flush completes */
+	for (count = TIMEOUT_US; BVAL(tmc_readl(drvdata, TMC_FFCR), 6) != 0
+				&& count > 0; count--)
+		udelay(1);
+	if (count == 0)
+		pr_warn_ratelimited("timeout flushing TMC, TMC_FFCR: %#x\n",
+				    tmc_readl(drvdata, TMC_FFCR));
+	/* Restore stop trace on flush bit */
+	ffcr = ffcr | (stopbit << 12);
+	tmc_writel(drvdata, ffcr, TMC_FFCR);
+out:
+	spin_unlock_irqrestore(&drvdata->spinlock, flags);
+	return NOTIFY_DONE;
 }
 
 static void __tmc_enable(struct tmc_drvdata *drvdata)
@@ -1781,6 +1829,10 @@ static int tmc_probe(struct platform_device *pdev)
 			if (IS_ERR(drvdata->cti_reset))
 				dev_err(dev, "failed to get reset cti\n");
 		}
+
+		drvdata->notify = of_property_read_bool(pdev->dev.of_node,
+						"qcom,tmc-flush-powerdown");
+
 	}
 
 	desc = devm_kzalloc(dev, sizeof(*desc), GFP_KERNEL);
@@ -1838,6 +1890,18 @@ static int tmc_probe(struct platform_device *pdev)
 	if (ret)
 		goto err3;
 
+	if (drvdata->notify) {
+		drvdata->jtag_save_blk.notifier_call = tmc_flush_on_powerdown;
+		drvdata->jtag_save_blk.priority = 1;
+		ret = msm_jtag_save_register(&drvdata->jtag_save_blk);
+		if (ret) {
+			dev_err(dev,
+				"Jtag save notifier register failed:%d\n",
+				ret);
+			drvdata->notify = false;
+		}
+	}
+
 	dev_info(dev, "TMC initialized\n");
 	return 0;
 err3:
@@ -1854,6 +1918,8 @@ static int tmc_remove(struct platform_device *pdev)
 {
 	struct tmc_drvdata *drvdata = platform_get_drvdata(pdev);
 
+	if (drvdata->notify)
+		msm_jtag_save_unregister(&drvdata->jtag_save_blk);
 	tmc_etr_byte_cntr_exit(drvdata);
 	misc_deregister(&drvdata->miscdev);
 	coresight_unregister(drvdata->csdev);
