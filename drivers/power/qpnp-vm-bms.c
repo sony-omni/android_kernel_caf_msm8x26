@@ -2141,6 +2141,63 @@ static int read_shutdown_ocv_soc(struct qpnp_bms_chip *chip)
 	return 0;
 }
 
+static int interpolate_current_comp(int die_temp)
+{
+	int i;
+	int num_rows = ARRAY_SIZE(temp_curr_comp_lut);
+
+	if (die_temp <= (temp_curr_comp_lut[0].temp_deg))
+		return temp_curr_comp_lut[0].current_ma;
+
+	if (die_temp >= (temp_curr_comp_lut[num_rows - 1].temp_deg))
+		return temp_curr_comp_lut[num_rows - 1].current_ma;
+
+	for (i = 0; i < num_rows - 1; i++)
+		if (die_temp  <= (temp_curr_comp_lut[i].temp_deg))
+			break;
+
+	if (die_temp == (temp_curr_comp_lut[i].temp_deg))
+		return temp_curr_comp_lut[i].current_ma;
+
+	return linear_interpolate(
+				temp_curr_comp_lut[i - 1].current_ma,
+				temp_curr_comp_lut[i - 1].temp_deg,
+				temp_curr_comp_lut[i].current_ma,
+				temp_curr_comp_lut[i].temp_deg,
+				die_temp);
+}
+
+static void adjust_pon_ocv(struct qpnp_bms_chip *chip, int batt_temp)
+{
+	int rc, current_ma, rbatt_mohm, die_temp, delta_uv, pc;
+	struct qpnp_vadc_result result;
+
+	rc = qpnp_vadc_read(chip->vadc_dev, DIE_TEMP, &result);
+	if (rc) {
+		pr_err("error reading adc channel=%d, rc=%d\n", DIE_TEMP, rc);
+	} else {
+		pc = interpolate_pc(chip->batt_data->pc_temp_ocv_lut,
+					batt_temp, chip->last_ocv_uv / 1000);
+		/*
+		* For pc < 2, use the rbatt of pc = 2. This is to avoid
+		* the huge rbatt values at pc < 2 which can disrupt the pon_ocv
+		* calculations.
+		*/
+		if (pc < 2)
+			pc = 2;
+		rbatt_mohm = get_rbatt(chip, pc, batt_temp);
+		/* convert die_temp to DECIDEGC */
+		die_temp = (int)result.physical / 100;
+		current_ma = interpolate_current_comp(die_temp);
+		delta_uv = rbatt_mohm * current_ma;
+		pr_debug("PON OCV changed from %d to %d pc=%d rbatt=%d current_ma=%d die_temp=%d batt_temp=%d delta_uv=%d\n",
+			chip->last_ocv_uv, chip->last_ocv_uv + delta_uv, pc,
+			rbatt_mohm, current_ma, die_temp, batt_temp, delta_uv);
+
+		chip->last_ocv_uv += delta_uv;
+	}
+}
+
 static int calculate_initial_soc(struct qpnp_bms_chip *chip)
 {
 	int rc, batt_temp = 0, est_ocv = 0, shutdown_soc = 0;
