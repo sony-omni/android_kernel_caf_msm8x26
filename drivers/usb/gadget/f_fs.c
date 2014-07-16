@@ -885,8 +885,8 @@ first_try:
 		spin_unlock_irq(&epfile->ffs->eps_lock);
 
 		if (unlikely(ret < 0)) {
-			ret = -EIO;
-		} else if (unlikely(wait_for_completion_interruptible(done))) {
+			/* nop */
+		} else if (unlikely(wait_for_completion_interruptible(&done))) {
 			spin_lock_irq(&epfile->ffs->eps_lock);
 			/*
 			 * While we were acquiring lock endpoint got disabled
