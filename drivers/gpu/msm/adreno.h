@@ -153,6 +153,53 @@ struct adreno_busy_data {
 	unsigned int vbif_starved_ram;
 };
 
+/**
+ * struct adreno_gpu_core - A specific GPU core definition
+ * @gpurev: Unique GPU revision identifier
+ * @core: Match for the core version of the GPU
+ * @major: Match for the major version of the GPU
+ * @minor: Match for the minor version of the GPU
+ * @patchid: Match for the patch revision of the GPU
+ * @features: Common adreno features supported by this core
+ * @pm4fw_name: Filename for th PM4 firmware
+ * @pfpfw_name: Filename for the PFP firmware
+ * @gpudev: Pointer to the GPU family specific functions for this core
+ * @gmem_size: Amount of binning memory (GMEM/OCMEM) to reserve for the core
+ * @sync_lock_pm4_ver: For IOMMUv0 cores the version of PM4 microcode that
+ * supports the sync lock mechanism
+ * @sync_lock_pfp_ver: For IOMMUv0 cores the version of PFP microcode that
+ * supports the sync lock mechanism
+ * @pm4_jt_idx: Index of the jump table in the PM4 microcode
+ * @pm4_jt_addr: Address offset to load the jump table for the PM4 microcode
+ * @pfp_jt_idx: Index of the jump table in the PFP microcode
+ * @pfp_jt_addr: Address offset to load the jump table for the PFP microcode
+ * @pm4_bstrp_size: Size of the bootstrap loader for PM4 microcode
+ * @pfp_bstrp_size: Size of the bootstrap loader for PFP microcde
+ * @pfp_bstrp_ver: Version of the PFP microcode that supports bootstraping
+ * @shader_offset: Offset of shader from gpu reg base
+ * @shader_size: Shader size
+ */
+struct adreno_gpu_core {
+	enum adreno_gpurev gpurev;
+	unsigned int core, major, minor, patchid;
+	unsigned long features;
+	const char *pm4fw_name;
+	const char *pfpfw_name;
+	struct adreno_gpudev *gpudev;
+	size_t gmem_size;
+	unsigned int sync_lock_pm4_ver;
+	unsigned int sync_lock_pfp_ver;
+	unsigned int pm4_jt_idx;
+	unsigned int pm4_jt_addr;
+	unsigned int pfp_jt_idx;
+	unsigned int pfp_jt_addr;
+	unsigned int pm4_bstrp_size;
+	unsigned int pfp_bstrp_size;
+	unsigned int pfp_bstrp_ver;
+	unsigned long shader_offset;
+	unsigned int shader_size;
+};
+
 struct adreno_device {
 	struct kgsl_device dev;    /* Must be first field in this struct */
 	unsigned long priv;
