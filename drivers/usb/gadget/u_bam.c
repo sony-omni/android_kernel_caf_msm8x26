@@ -927,7 +927,52 @@ static void gbam2bam_connect_work(struct work_struct *w)
 	struct bam_ch_info *d = &port->data_ch;
 	u32 sps_params;
 	int ret;
-	unsigned long flags;
+	unsigned long flags, flags_ul;
+
+	spin_lock_irqsave(&port->port_lock, flags);
+
+	if (port->last_event == U_BAM_DISCONNECT_E) {
+		pr_debug("%s: Port is about to disconnected. Bailing out.\n",
+			__func__);
+		spin_unlock_irqrestore(&port->port_lock, flags);
+		return;
+	}
+
+	port->is_connected = true;
+
+	spin_lock_irqsave(&port->port_lock_ul, flags_ul);
+	spin_lock(&port->port_lock_dl);
+	if (!port->port_usb) {
+		pr_debug("%s: usb cable is disconnected, exiting\n", __func__);
+		spin_unlock(&port->port_lock_dl);
+		spin_unlock_irqrestore(&port->port_lock_ul, flags_ul);
+		spin_unlock_irqrestore(&port->port_lock, flags);
+		return;
+	}
+
+	gadget = port->port_usb->gadget;
+	if (!gadget) {
+		spin_unlock(&port->port_lock_dl);
+		spin_unlock_irqrestore(&port->port_lock_ul, flags_ul);
+		spin_unlock_irqrestore(&port->port_lock, flags);
+		pr_err("%s: port_usb.gadget is NULL, exiting\n", __func__);
+		return;
+	}
+	d = &port->data_ch;
+
+	d->rx_req = usb_ep_alloc_request(port->port_usb->out, GFP_ATOMIC);
+	if (!d->rx_req) {
+		spin_unlock(&port->port_lock_dl);
+		spin_unlock_irqrestore(&port->port_lock_ul, flags_ul);
+		spin_unlock_irqrestore(&port->port_lock, flags);
+		pr_err("%s: out of memory\n", __func__);
+		return;
+	}
+
+	d->rx_req->context = port;
+	d->rx_req->complete = gbam_endless_rx_complete;
+	d->rx_req->length = 0;
+	d->rx_req->no_interrupt = 1;
 
 	if (port)
 		dev = port_to_rmnet(port->gr);
@@ -995,11 +1040,9 @@ static void gbam2bam_connect_work(struct work_struct *w)
 			return;
 		}
 
-		if (gadget && gadget_is_dwc3(gadget)) {
-			u8 idx;
-
-			idx = usb_bam_get_connection_idx(gadget->name,
-				IPA_P_BAM, USB_TO_PEER_PERIPHERAL,
+		if (gadget_is_dwc3(gadget)) {
+			d->src_bam_idx = usb_bam_get_connection_idx(
+				gadget->name, IPA_P_BAM, USB_TO_PEER_PERIPHERAL,
 				USB_BAM_DEVICE, 0);
 			if (idx < 0) {
 				pr_err("%s: get_connection_idx failed\n",
@@ -1024,11 +1067,9 @@ static void gbam2bam_connect_work(struct work_struct *w)
 			return;
 		}
 
-		if (gadget && gadget_is_dwc3(gadget)) {
-			u8 idx;
-
-			idx = usb_bam_get_connection_idx(gadget->name,
-				IPA_P_BAM, PEER_PERIPHERAL_TO_USB,
+		if (gadget_is_dwc3(gadget)) {
+			d->dst_bam_idx = usb_bam_get_connection_idx(
+				gadget->name, IPA_P_BAM, PEER_PERIPHERAL_TO_USB,
 				USB_BAM_DEVICE, 0);
 			if (idx < 0) {
 				pr_err("%s: get_connection_idx failed\n",
@@ -1054,29 +1095,8 @@ static void gbam2bam_connect_work(struct work_struct *w)
 			return;
 		}
 	}
-
-	spin_lock_irqsave(&port->port_lock_ul, flags);
-	spin_lock(&port->port_lock_dl);
-	if (!port->port_usb) {
-		pr_debug("%s: usb cable is disconnected, exiting\n", __func__);
-		spin_unlock(&port->port_lock_dl);
-		spin_unlock_irqrestore(&port->port_lock_ul, flags);
-		return;
-	}
-	d->rx_req = usb_ep_alloc_request(port->port_usb->out, GFP_ATOMIC);
-	if (!d->rx_req) {
-		spin_unlock(&port->port_lock_dl);
-		spin_unlock_irqrestore(&port->port_lock_ul, flags);
-		pr_err("%s: out of memory\n", __func__);
-		return;
-	}
-
-	d->rx_req->context = port;
-	d->rx_req->complete = gbam_endless_rx_complete;
-	d->rx_req->length = 0;
-	d->rx_req->no_interrupt = 1;
-
-	if (gadget && gadget_is_dwc3(gadget)) {
+	/* Update BAM specific attributes */
+	if (gadget_is_dwc3(gadget)) {
 		sps_params = MSM_SPS_MODE | MSM_DISABLE_WB | MSM_PRODUCER |
 			d->src_pipe_idx;
 		d->rx_req->length = 32*1024;
@@ -1086,20 +1106,7 @@ static void gbam2bam_connect_work(struct work_struct *w)
 
 	d->rx_req->udc_priv = sps_params;
 
-	d->tx_req = usb_ep_alloc_request(port->port_usb->in, GFP_ATOMIC);
-	spin_unlock(&port->port_lock_dl);
-	spin_unlock_irqrestore(&port->port_lock_ul, flags);
-	if (!d->tx_req) {
-		pr_err("%s: out of memory\n", __func__);
-		return;
-	}
-
-	d->tx_req->context = port;
-	d->tx_req->complete = gbam_endless_tx_complete;
-	d->tx_req->length = 0;
-	d->tx_req->no_interrupt = 1;
-
-	if (gadget && gadget_is_dwc3(gadget)) {
+	if (gadget_is_dwc3(gadget)) {
 		sps_params = MSM_SPS_MODE | MSM_DISABLE_WB | d->dst_pipe_idx;
 		d->tx_req->length = 32*1024;
 	} else
@@ -1598,6 +1605,10 @@ int gbam_connect(struct grmnet *gr, u8 port_num,
 	unsigned long		flags;
 
 	pr_debug("%s: grmnet:%p port#%d\n", __func__, gr, port_num);
+	if (!gr) {
+		pr_err("%s: grmnet port is null\n", __func__);
+		return -ENODEV;
+	}
 
 	if (trans == USB_GADGET_XPORT_BAM && port_num >= n_bam_ports) {
 		pr_err("%s: invalid portno#%d\n", __func__, port_num);
@@ -1608,11 +1619,6 @@ int gbam_connect(struct grmnet *gr, u8 port_num,
 		trans == USB_GADGET_XPORT_BAM2BAM_IPA)
 		&& port_num >= n_bam2bam_ports) {
 		pr_err("%s: invalid portno#%d\n", __func__, port_num);
-		return -ENODEV;
-	}
-
-	if (!gr) {
-		pr_err("%s: grmnet port is null\n", __func__);
 		return -ENODEV;
 	}
 
