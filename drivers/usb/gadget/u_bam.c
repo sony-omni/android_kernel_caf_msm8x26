@@ -1610,6 +1610,11 @@ int gbam_connect(struct grmnet *gr, u8 port_num,
 		return -ENODEV;
 	}
 
+	if (!gr->gadget) {
+		pr_err("%s: gadget handle not passed\n", __func__);
+		return -EINVAL;
+	}
+
 	if (trans == USB_GADGET_XPORT_BAM && port_num >= n_bam_ports) {
 		pr_err("%s: invalid portno#%d\n", __func__, port_num);
 		return -ENODEV;
