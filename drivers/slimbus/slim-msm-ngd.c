@@ -314,7 +314,6 @@ static int ngd_xfer_msg(struct slim_controller *ctrl, struct slim_msg_txn *txn)
 	bool report_sat = false;
 	enum msm_ctrl_state cur_state = dev->state;
 
-	mutex_lock(&dev->tx_lock);
 	if (txn->mc == SLIM_USR_MC_REPORT_SATELLITE &&
 		txn->mt == SLIM_MSG_MT_SRC_REFERRED_USER)
 		report_sat = true;
@@ -328,7 +327,6 @@ static int ngd_xfer_msg(struct slim_controller *ctrl, struct slim_msg_txn *txn)
 		 * If the state was DOWN, SSR UP notification will take
 		 * care of putting the device in active state.
 		 */
-		mutex_unlock(&dev->tx_lock);
 		ret = ngd_slim_runtime_resume(dev->dev);
 
 		if (ret) {
@@ -339,22 +337,18 @@ static int ngd_xfer_msg(struct slim_controller *ctrl, struct slim_msg_txn *txn)
 	}
 
 	else if (txn->mc & SLIM_MSG_CLK_PAUSE_SEQ_FLG) {
-		mutex_unlock(&dev->tx_lock);
 		return -EPROTONOSUPPORT;
 	}
 
 	if (txn->mt == SLIM_MSG_MT_CORE &&
 		(txn->mc >= SLIM_MSG_MC_BEGIN_RECONFIGURATION &&
 		 txn->mc <= SLIM_MSG_MC_RECONFIGURE_NOW)) {
-		mutex_unlock(&dev->tx_lock);
 		return 0;
 	}
 
 	/* If txn is tried when controller is down, wait for ADSP to boot */
 	if (!report_sat) {
-		enum msm_ctrl_state cur_state = dev->state;
 
-		mutex_unlock(&dev->tx_lock);
 		if (cur_state == MSM_CTRL_DOWN) {
 			u8 mc = (u8)txn->mc;
 			int timeout;
@@ -451,12 +445,12 @@ static int ngd_xfer_msg(struct slim_controller *ctrl, struct slim_msg_txn *txn)
 				SLIM_DBG(dev, "SLIM PGD LA:0x%x, ret:%d\n",
 					dev->pgdla, ret);
 				if (ret) {
-					mutex_unlock(&dev->tx_lock);
 					SLIM_ERR(dev,
 						"Incorrect SLIM-PGD EAPC:0x%x\n",
 							dev->pdata.eapc);
 					return ret;
 				}
+				mutex_lock(&dev->tx_lock);
 			}
 			txn->la = dev->pgdla;
 		}
