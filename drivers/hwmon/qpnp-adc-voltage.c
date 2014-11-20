@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -99,7 +100,25 @@
 #define QPNP_VADC_CONV_TIME_MIN					2000
 #define QPNP_VADC_CONV_TIME_MAX					2100
 #define QPNP_ADC_COMPLETION_TIMEOUT				HZ
-#define QPNP_VADC_ERR_COUNT					20
+#define QPNP_VADC_ERR_COUNT					1000
+#define QPNP_OP_MODE_SHIFT					3
+
+#define QPNP_VADC_THR_LSB_MASK(val)				(val & 0xff)
+#define QPNP_VADC_THR_MSB_MASK(val)			((val & 0xff00) >> 8)
+#define QPNP_MIN_TIME						2000
+#define QPNP_MAX_TIME						2000
+#define QPNP_RETRY						100
+#define QPNP_VADC_ABSOLUTE_RECALIB_OFFSET			8
+#define QPNP_VADC_RATIOMETRIC_RECALIB_OFFSET			12
+#define QPNP_VADC_RECALIB_MAXCNT				10
+
+struct qpnp_vadc_mode_state {
+	bool				meas_int_mode;
+	bool				meas_int_request_in_queue;
+	bool				vadc_meas_int_enable;
+	struct qpnp_adc_tm_btm_param	*param;
+	struct qpnp_adc_amux		vadc_meas_amux;
+};
 
 struct qpnp_vadc_chip {
 	struct device			*dev;
@@ -130,6 +149,7 @@ static struct qpnp_vadc_scale_fn vadc_scale_fn[] = {
 	[SCALE_QRD_BATT_THERM] = {qpnp_adc_scale_qrd_batt_therm},
 	[SCALE_QRD_SKUAA_BATT_THERM] = {qpnp_adc_scale_qrd_skuaa_batt_therm},
 	[SCALE_SMB_BATT_THERM] = {qpnp_adc_scale_smb_batt_therm},
+	[SCALE_EMMC_THERM] = {qpnp_adc_scale_emmc_therm},
 	[SCALE_QRD_SKUG_BATT_THERM] = {qpnp_adc_scale_qrd_skug_batt_therm},
 	[SCALE_QRD_SKUH_BATT_THERM] = {qpnp_adc_scale_qrd_skuh_batt_therm},
 	[SCALE_NCP_03WF683_THERM] = {qpnp_adc_scale_therm_ncp03},
