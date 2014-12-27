@@ -1043,4 +1043,38 @@ config TOUCHSCREEN_GT9XX
 
 source "drivers/input/touchscreen/gt9xx/Kconfig"
 
+config TOUCHSCREEN_BU21150
+	tristate "JDI AFE BU21150"
+	depends on SPI_MASTER
+	help
+	  This enables support for character device channel for
+	  Rohm BU21150 Touch AFE.
+
+	  Say Y here if you have a Rohm bu21150 AFE connected to
+	  your system.
+
+	  If unsure, say N.
+
+config INPUT_MT_WRAPPER
+	tristate "Input Multitouch Wrapper"
+	help
+	  This enables support for character device channel for
+	  passing to the input system a multi-touch coordinates.
+
+	  Say Y here if you want to enable the driver.
+
+	  If unsure, say N.
+
+config TOUCHSCREEN_ELAN_EKTF3135
+	tristate "ELAN EKTF3135 I2C touchscreen"
+	depends on I2C
+	help
+	  Say Y here if you have a ELAN EKTF3135 I2C touchscreen
+	  connected to your system.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called synaptics_dsx_i2c.
+
 endif
