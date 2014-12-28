@@ -63,6 +63,27 @@ static void check_dsi_ctrl_status(struct work_struct *work)
 	pdsi_status->mfd->mdp.check_dsi_status(work, interval);
 }
 
+irqreturn_t hw_vsync_handler(int irq, void *data)
+{
+        struct mdss_dsi_ctrl_pdata *ctrl_pdata =
+                        (struct mdss_dsi_ctrl_pdata *)data;
+        if (!ctrl_pdata) {
+                pr_err("%s: DSI ctrl not available\n", __func__);
+                return IRQ_HANDLED;
+        }
+
+        if (pstatus_data)
+                mod_delayed_work(system_wq, &pstatus_data->check_status,
+                        msecs_to_jiffies(interval));
+        else
+                pr_err("Pstatus data is NULL\n");
+
+        if (!atomic_read(&ctrl_pdata->te_irq_ready))
+                atomic_inc(&ctrl_pdata->te_irq_ready);
+
+        return IRQ_HANDLED;
+}
+
 /*
  * fb_event_callback() - Call back function for the fb_register_client()
  *			 notifying events

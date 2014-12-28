@@ -406,6 +406,7 @@ struct mdss_dsi_ctrl_pdata {
 	int new_fps;
 	int pwm_enabled;
 	bool panel_bias_vreg;
+	atomic_t te_irq_ready;
 
 	bool cmd_sync_wait_broadcast;
 	bool cmd_sync_wait_trigger;
