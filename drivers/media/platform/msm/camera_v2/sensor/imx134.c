@@ -79,6 +79,81 @@ static struct msm_sensor_power_setting imx134_power_setting[] = {
 	},
 };
 
+static struct msm_sensor_power_setting imx134_eagle_power_setting[] = {
+	{
+		.seq_type = SENSOR_VREG,
+		.seq_val = CAM_VIO, /*I2C-Pull-Up*/
+		.config_val = 0,
+		.delay = 0,
+	},
+	{
+		.seq_type = SENSOR_VREG,
+		.seq_val = CAM_VDIG,
+		.config_val = 0,
+		.delay = 0,
+	},
+	{
+		.seq_type = SENSOR_VREG,
+		.seq_val = CAM_VANA,
+		.config_val = 0,
+		.delay = 0,
+	},
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_VIO, /*VIF*/
+		.config_val = GPIO_OUT_LOW,
+		.delay = 0,
+	},
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_VIO, /*VIF*/
+		.config_val = GPIO_OUT_HIGH,
+		.delay = 1,
+	},
+	{
+		.seq_type = SENSOR_CLK,
+		.seq_val = SENSOR_CAM_MCLK,
+		.config_val = 24000000,
+		.delay = 1,
+	},
+	{
+		.seq_type = SENSOR_VREG,
+		.seq_val = CAM_VAF,
+		.config_val = 0,
+		.delay = 0,
+	},
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_STANDBY,
+		.config_val = GPIO_OUT_LOW,
+		.delay = 0,
+	},
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_STANDBY,
+		.config_val = GPIO_OUT_HIGH,
+		.delay = 0,
+	},
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_RESET,
+		.config_val = GPIO_OUT_LOW,
+		.delay = 0,
+	},
+	{
+		.seq_type = SENSOR_GPIO,
+		.seq_val = SENSOR_GPIO_RESET,
+		.config_val = GPIO_OUT_HIGH,
+		.delay = 1,
+	},
+	{
+		.seq_type = SENSOR_I2C_MUX,
+		.seq_val = 0,
+		.config_val = 0,
+		.delay = 0,
+	},
+};
+
 static struct v4l2_subdev_info imx134_subdev_info[] = {
 	{
 		.code = V4L2_MBUS_FMT_SBGGR10_1X10,
@@ -112,7 +187,7 @@ static struct msm_camera_i2c_client imx134_sensor_i2c_client = {
 };
 
 static const struct of_device_id imx134_dt_match[] = {
-	{.compatible = "sne,imx134", .data = &imx134_s_ctrl},
+	{.compatible = "qcom,imx134", .data = &imx134_s_ctrl},
 	{}
 };
 
@@ -120,7 +195,7 @@ MODULE_DEVICE_TABLE(of, imx134_dt_match);
 
 static struct platform_driver imx134_platform_driver = {
 	.driver = {
-		.name = "sne,imx134",
+		.name = "qcom,imx134",
 		.owner = THIS_MODULE,
 		.of_match_table = imx134_dt_match,
 	},
@@ -144,6 +219,17 @@ static int __init imx134_init_module(void)
 {
 	int32_t rc = 0;
 	pr_debug("%s:%d\n", __func__, __LINE__);
+	if (of_machine_is_compatible("somc,eagle")) {
+		imx134_s_ctrl.power_setting_array.power_setting =
+					imx134_eagle_power_setting;
+		imx134_s_ctrl.power_setting_array.size =
+					ARRAY_SIZE(imx134_eagle_power_setting);
+	} else {
+		imx134_s_ctrl.power_setting_array.power_setting =
+					imx134_power_setting;
+		imx134_s_ctrl.power_setting_array.size =
+					ARRAY_SIZE(imx134_power_setting);
+	}
 	rc = platform_driver_probe(&imx134_platform_driver,
 		imx134_platform_probe);
 	if (!rc)
