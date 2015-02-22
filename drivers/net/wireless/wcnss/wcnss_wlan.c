@@ -38,6 +38,7 @@
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/subsystem_notif.h>
 
+#include <mach/board.h>
 #include <mach/msm_smd.h>
 #include <mach/msm_iomap.h>
 
@@ -140,6 +141,20 @@ static DEFINE_SPINLOCK(reg_spinlock);
 
 #define MSM_PRONTO_PLL_BASE				0xfb21b1c0
 #define PRONTO_PLL_STATUS_OFFSET		0x1c
+
+#define MSM_PRONTO_MCU_BASE			0xfb080c00
+#define MCU_CBR_CCAHB_ERR_OFFSET		0x380
+#define MCU_CBR_CAHB_ERR_OFFSET			0x384
+#define MCU_CBR_CCAHB_TIMEOUT_OFFSET		0x388
+#define MCU_CBR_CAHB_TIMEOUT_OFFSET		0x38c
+#define MCU_DBR_CDAHB_ERR_OFFSET		0x390
+#define MCU_DBR_DAHB_ERR_OFFSET			0x394
+#define MCU_DBR_CDAHB_TIMEOUT_OFFSET		0x398
+#define MCU_DBR_DAHB_TIMEOUT_OFFSET		0x39c
+#define MCU_FDBR_CDAHB_ERR_OFFSET		0x3a0
+#define MCU_FDBR_FDAHB_ERR_OFFSET		0x3a4
+#define MCU_FDBR_CDAHB_TIMEOUT_OFFSET		0x3a8
+#define MCU_FDBR_FDAHB_TIMEOUT_OFFSET		0x3ac
 
 #define MSM_PRONTO_TXP_STATUS           0xfb08040c
 #define MSM_PRONTO_TXP_PHY_ABORT        0xfb080488
@@ -349,6 +364,7 @@ static struct {
 	void __iomem *pronto_ccpu_base;
 	void __iomem *pronto_saw2_base;
 	void __iomem *pronto_pll_base;
+	void __iomem *pronto_mcu_base;
 	void __iomem *wlan_tx_status;
 	void __iomem *wlan_tx_phy_aborts;
 	void __iomem *wlan_brdg_err_source;
@@ -577,6 +593,14 @@ void wcnss_pronto_log_debug_regs(void)
 	reg = readl_relaxed(reg_addr);
 	pr_err("PRONTO_SAW2_SPM_STS %08x\n", reg);
 
+	reg_addr = penv->pronto_pll_base + PRONTO_PLL_STATUS_OFFSET;
+	reg = readl_relaxed(reg_addr);
+	pr_err("PRONTO_PLL_STATUS %08x\n", reg);
+
+	reg_addr = penv->msm_wcnss_base + PRONTO_PMU_CPU_AHB_CMD_RCGR_OFFSET;
+	reg4 = readl_relaxed(reg_addr);
+	pr_err("PMU_CPU_CMD_RCGR %08x\n", reg4);
+
 	reg_addr = penv->msm_wcnss_base + PRONTO_PMU_COM_GDSCR_OFFSET;
 	reg = readl_relaxed(reg_addr);
 	pr_err("PRONTO_PMU_COM_GDSCR %08x\n", reg);
@@ -707,14 +731,64 @@ void wcnss_pronto_log_debug_regs(void)
 		return;
 	}
 
+	msleep(50);
+
 	reg = readl_relaxed(penv->wlan_tx_phy_aborts);
 	pr_err("WLAN_TX_PHY_ABORTS %08x\n", reg);
+
+	reg_addr = penv->pronto_mcu_base + MCU_CBR_CCAHB_ERR_OFFSET;
+	reg = readl_relaxed(reg_addr);
+	pr_err("MCU_CBR_CCAHB_ERR %08x\n", reg);
+
+	reg_addr = penv->pronto_mcu_base + MCU_CBR_CAHB_ERR_OFFSET;
+	reg = readl_relaxed(reg_addr);
+	pr_err("MCU_CBR_CAHB_ERR %08x\n", reg);
+
+	reg_addr = penv->pronto_mcu_base + MCU_CBR_CCAHB_TIMEOUT_OFFSET;
+	reg = readl_relaxed(reg_addr);
+	pr_err("MCU_CBR_CCAHB_TIMEOUT %08x\n", reg);
+
+	reg_addr = penv->pronto_mcu_base + MCU_CBR_CAHB_TIMEOUT_OFFSET;
+	reg = readl_relaxed(reg_addr);
+	pr_err("MCU_CBR_CAHB_TIMEOUT %08x\n", reg);
+
+	reg_addr = penv->pronto_mcu_base + MCU_DBR_CDAHB_ERR_OFFSET;
+	reg = readl_relaxed(reg_addr);
+	pr_err("MCU_DBR_CDAHB_ERR %08x\n", reg);
+
+	reg_addr = penv->pronto_mcu_base + MCU_DBR_DAHB_ERR_OFFSET;
+	reg = readl_relaxed(reg_addr);
+	pr_err("MCU_DBR_DAHB_ERR %08x\n", reg);
+
+	reg_addr = penv->pronto_mcu_base + MCU_DBR_CDAHB_TIMEOUT_OFFSET;
+	reg = readl_relaxed(reg_addr);
+	pr_err("MCU_DBR_CDAHB_TIMEOUT %08x\n", reg);
+
+	reg_addr = penv->pronto_mcu_base + MCU_DBR_DAHB_TIMEOUT_OFFSET;
+	reg = readl_relaxed(reg_addr);
+	pr_err("MCU_DBR_DAHB_TIMEOUT %08x\n", reg);
+
+	reg_addr = penv->pronto_mcu_base + MCU_FDBR_CDAHB_ERR_OFFSET;
+	reg = readl_relaxed(reg_addr);
+	pr_err("MCU_FDBR_CDAHB_ERR %08x\n", reg);
+
+	reg_addr = penv->pronto_mcu_base + MCU_FDBR_FDAHB_ERR_OFFSET;
+	reg = readl_relaxed(reg_addr);
+	pr_err("MCU_FDBR_FDAHB_ERR %08x\n", reg);
+
+	reg_addr = penv->pronto_mcu_base + MCU_FDBR_CDAHB_TIMEOUT_OFFSET;
+	reg = readl_relaxed(reg_addr);
+	pr_err("MCU_FDBR_CDAHB_TIMEOUT %08x\n", reg);
+
+	reg_addr = penv->pronto_mcu_base + MCU_FDBR_FDAHB_TIMEOUT_OFFSET;
+	reg = readl_relaxed(reg_addr);
+	pr_err("MCU_FDBR_FDAHB_TIMEOUT %08x\n", reg);
 
 	reg = readl_relaxed(penv->wlan_brdg_err_source);
 	pr_err("WLAN_BRDG_ERR_SOURCE %08x\n", reg);
 
 	reg = readl_relaxed(penv->wlan_tx_status);
-	pr_err("WLAN_TXP_STATUS %08x\n", reg);
+	pr_info_ratelimited("%s: WLAN_TX_STATUS %08x\n", __func__, reg);
 
 	reg = readl_relaxed(penv->alarms_txctl);
 	pr_err("ALARMS_TXCTL %08x\n", reg);
@@ -725,6 +799,22 @@ void wcnss_pronto_log_debug_regs(void)
 EXPORT_SYMBOL(wcnss_pronto_log_debug_regs);
 
 #ifdef CONFIG_WCNSS_REGISTER_DUMP_ON_BITE
+static void wcnss_log_iris_regs(void)
+{
+	int i;
+	u32 reg_val;
+	u32 regs_array[] = {
+		0x04, 0x05, 0x11, 0x1e, 0x40, 0x48,
+		0x49, 0x4b, 0x00, 0x01, 0x4d};
+
+	pr_info("IRIS Registers [address] : value\n");
+
+	for (i = 0; i < ARRAY_SIZE(regs_array); i++) {
+		reg_val = wcnss_rf_read_reg(regs_array[i]);
+		pr_info("[0x%08x] : 0x%08x\n", regs_array[i], reg_val);
+	}
+}
+
 void wcnss_log_debug_regs_on_bite(void)
 {
 	struct platform_device *pdev = wcnss_get_platform_device();
@@ -745,10 +835,12 @@ void wcnss_log_debug_regs_on_bite(void)
 		clk_rate = clk_get_rate(measure);
 		pr_debug("wcnss: clock frequency is: %luHz\n", clk_rate);
 
-		if (clk_rate)
+		if (clk_rate) {
 			wcnss_pronto_log_debug_regs();
-		else
+		} else {
 			pr_err("clock frequency is zero, cannot access PMU or other registers\n");
+			wcnss_log_iris_regs();
+		}
 	}
 }
 #endif
@@ -2191,6 +2283,13 @@ wcnss_trigger_config(struct platform_device *pdev)
 			pr_err("%s: ioremap alarms TACTL failed\n", __func__);
 			goto fail_ioremap11;
 		}
+		penv->pronto_mcu_base = ioremap(MSM_PRONTO_MCU_BASE, SZ_1K);
+		if (!penv->pronto_mcu_base) {
+			ret = -ENOMEM;
+			pr_err("%s: ioremap wcnss physical(mcu) failed\n",
+				__func__);
+			goto fail_ioremap12;
+		}
 	}
 	penv->adc_tm_dev = qpnp_get_adc_tm(&penv->pdev->dev, "wcnss");
 	if (IS_ERR(penv->adc_tm_dev)) {
@@ -2221,6 +2320,9 @@ wcnss_trigger_config(struct platform_device *pdev)
 fail_pil:
 	if (penv->riva_ccu_base)
 		iounmap(penv->riva_ccu_base);
+	if (penv->pronto_mcu_base)
+		iounmap(penv->pronto_mcu_base);
+fail_ioremap12:
 	if (penv->alarms_tactl)
 		iounmap(penv->alarms_tactl);
 fail_ioremap11:
@@ -2334,7 +2436,7 @@ static ssize_t wcnss_wlan_write(struct file *fp, const char __user
 			*user_buffer, size_t count, loff_t *position)
 {
 	int rc = 0;
-	u32 size = 0;
+	size_t size = 0;
 
 	if (!penv || !penv->device_opened || penv->user_cal_available)
 		return -EFAULT;
@@ -2363,7 +2465,7 @@ static ssize_t wcnss_wlan_write(struct file *fp, const char __user
 
 	if ((UINT32_MAX - count < penv->user_cal_rcvd) ||
 	     MAX_CALIBRATED_DATA_SIZE < count + penv->user_cal_rcvd) {
-		pr_err(DEVICE " invalid size to write %zu\n", count +
+		pr_err(DEVICE " invalid size to write %d\n", count +
 				penv->user_cal_rcvd);
 		rc = -ENOMEM;
 		goto exit;
