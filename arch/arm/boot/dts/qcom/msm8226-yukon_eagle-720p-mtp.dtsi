@@ -259,6 +259,11 @@
 		compatible = "qcom,spi-qup-v2";
 		status = "disabled";
 	};
+
+	qcom,wcnss-wlan@fb000000 {
+		qcom,wcnss-adc_tm = <&pm8226_adc_tm>;
+	};
+
 };
 
 &rpm_bus {
