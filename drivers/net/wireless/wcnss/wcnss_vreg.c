@@ -108,9 +108,14 @@ static struct vregs_info iris_vregs_pronto[] = {
 static struct vregs_info pronto_vregs[] = {
 	{"qcom,pronto-vddmx",  VREG_NULL_CONFIG, 950000,  0,
 		1150000, 0,    NULL},
+#ifndef CONFIG_MACH_SONY_EAGLE
 	{"qcom,pronto-vddcx",  VREG_NULL_CONFIG, RPM_REGULATOR_CORNER_NORMAL,
 		RPM_REGULATOR_CORNER_NONE, RPM_REGULATOR_CORNER_SUPER_TURBO,
 		0,             NULL},
+#else
+	{"qcom,pronto-vddcx", VREG_NULL_CONFIG, 900000, 0,
+		1150000, 0, NULL},
+#endif
 	{"qcom,pronto-vddpx",  VREG_NULL_CONFIG, 1800000, 0,
 		1800000, 0,    NULL},
 };
