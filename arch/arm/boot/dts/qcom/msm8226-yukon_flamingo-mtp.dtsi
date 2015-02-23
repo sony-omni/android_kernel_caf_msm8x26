@@ -11,7 +11,6 @@
  */
 
 /include/ "msm8226-yukon_common.dtsi"
-/include/ "msm8226-camera-sensor-mtp.dtsi"
 /include/ "dsi-panel-flamingo.dtsi"
 
 &soc {
@@ -30,6 +29,35 @@
                        qcom,memblock-reserve = <0x3e9e0000 0x100000>;
                };
        };
+
+	spi@f9923000 {
+		/delete-node/ ethernet-switch@3;
+	};
+
+	i2c@f9925000 { /* BLSP1 QUP3 */
+		nfc-nci@0e {
+			compatible = "qcom,nfc-nci";
+			reg = <0x0e>;
+			qcom,irq-gpio = <&msmgpio 21 0x00>;
+			qcom,dis-gpio = <&msmgpio 20 0x00>;
+			qcom,clk-src = "BBCLK2";
+			qcom,clk-en-gpio = <&msmgpio 0 0x00>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <21 0>;
+			qcom,clk-gpio = <&pm8226_gpios 3 0>;
+		};
+
+		pn547@28 {
+			compatible = "nxp,pn547";
+			reg = <0x28>;
+			nxp,ven = <&msmgpio 20 0x00>;
+			nxp,irq_gpio = <&msmgpio 21 0x00>;
+			nxp,dwld_en = <&msmgpio 22 0x00>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <21 0>;
+		};
+	};
+
 
 	i2c@f9927000 { /* BLSP1 QUP5 */
 		elan_ktf2k_ts@10{
@@ -60,34 +88,6 @@
 			synaptics,power-down;
 			synaptics,disable-gpios;
 		};
-	};
-
-	i2c@f9925000 { /* BLSP1 QUP3 */
-		nfc-nci@0e {
-			compatible = "qcom,nfc-nci";
-			reg = <0x0e>;
-			qcom,irq-gpio = <&msmgpio 21 0x00>;
-			qcom,dis-gpio = <&msmgpio 20 0x00>;
-			qcom,clk-src = "BBCLK2";
-			qcom,clk-en-gpio = <&msmgpio 0 0x00>;
-			interrupt-parent = <&msmgpio>;
-			interrupts = <21 0>;
-			qcom,clk-gpio = <&pm8226_gpios 3 0>;
-		};
-
-		pn547@28 {
-			compatible = "nxp,pn547";
-			reg = <0x28>;
-			nxp,irq_gpio = <&msmgpio 21 0x00>;
-			nxp,ven = <&msmgpio 20 0x00>;
-			nxp,dwld_en = <&msmgpio 22 0x00>;
-			interrupt-parent = <&msmgpio>;
-			interrupts = <21 0>;
-		};
-	};
-
-	spi@f9923000 {
-		/delete-node/ ethernet-switch@3;
 	};
 
 	sound {
@@ -124,31 +124,6 @@
 
 		qcom,cdc-mclk-gpios = <&pm8226_gpios 1 0>;
 		qcom,cdc-vdd-spkr-gpios = <&pm8226_gpios 2 0>;
-	};
-
-	ram_console {
-		compatible = "qcom,ram-console";
-		qcom,memory-fixed = <0x3f200000 0x40000>;
-	};
-
-	last_radio_log {
-		compatible = "qcom,last-radio-log";
-		qcom,memory-fixed = <0x3f240000 0x40000>;
-	};
-
-	ramdumpinfo {
-		compatible = "qcom,ramdumpinfo";
-		qcom,memory-fixed = <0x3f280000 0x0200>;
-	};
-
-	productinfo {
-		compatible = "qcom,productinfo";
-		qcom,memory-fixed = <0x3f280200 0x0200>;
-	};
-
-	restart_parameters {
-		compatible = "qcom,restart-parameters";
-		qcom,memory-fixed = <0x3f2C0000 0x40000>;
 	};
 };
 
