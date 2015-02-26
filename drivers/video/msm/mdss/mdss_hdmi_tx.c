@@ -1995,6 +1995,27 @@ exit:
 	return rc;
 } /* hdmi_tx_config_power */
 
+static int hdmi_tx_vote_power(struct hdmi_tx_ctrl *hdmi_ctrl,
+	enum hdmi_tx_power_module_type module)
+{
+	struct dss_module_power *power_data = NULL;
+
+	if (!hdmi_ctrl || module >= HDMI_TX_MAX_PM) {
+		DEV_ERR("%s: Error: invalid input\n", __func__);
+		return -EINVAL;
+	}
+
+	power_data = &hdmi_ctrl->pdata.power_data[module];
+	if (!power_data) {
+		DEV_ERR("%s: Error: invalid power data\n", __func__);
+		return -EINVAL;
+	}
+
+	power_data->enable = true;
+
+	return 0;
+}
+
 static int hdmi_tx_enable_power(struct hdmi_tx_ctrl *hdmi_ctrl,
 	enum hdmi_tx_power_module_type module, int enable)
 {
@@ -2014,13 +2035,7 @@ static int hdmi_tx_enable_power(struct hdmi_tx_ctrl *hdmi_ctrl,
 		goto error;
 	}
 
-	if (enable) {
-		if (hdmi_ctrl->panel_data.panel_info.cont_splash_enabled) {
-			DEV_DBG("%s: %s already eanbled by splash\n",
-				__func__, hdmi_pm_name(module));
-			return 0;
-		}
-
+	if (enable && !power_data->enable) {
 		rc = msm_dss_enable_vreg(power_data->vreg_config,
 			power_data->num_vreg, 1);
 		if (rc) {
@@ -2052,13 +2067,17 @@ static int hdmi_tx_enable_power(struct hdmi_tx_ctrl *hdmi_ctrl,
 				__func__, hdmi_tx_pm_name(module), rc);
 			goto disable_gpio;
 		}
-	} else {
+		power_data->enable = true;
+	} else if (!enable && power_data->enable &&
+		(!IS_CEC_WAKEUP_EN(hdmi_ctrl) ||
+		((module != HDMI_TX_HPD_PM) && (module != HDMI_TX_CEC_PM)))) {
 		msm_dss_enable_clk(power_data->clk_config,
 			power_data->num_clk, 0);
 		msm_dss_enable_gpio(power_data->gpio_config,
 			power_data->num_gpio, 0);
 		msm_dss_enable_vreg(power_data->vreg_config,
 			power_data->num_vreg, 0);
+		power_data->enable = false;
 	}
 
 	return rc;
@@ -2942,9 +2961,12 @@ static void hdmi_tx_hpd_off(struct hdmi_tx_ctrl *hdmi_ctrl)
 	/* Turn off HPD interrupts */
 	DSS_REG_W(io, HDMI_HPD_INT_CTRL, 0);
 
-	mdss_disable_irq(&hdmi_tx_hw);
-
-	hdmi_tx_set_mode(hdmi_ctrl, false);
+	if (IS_CEC_WAKEUP_EN(hdmi_ctrl)) {
+		mdss_enable_irq_wake(true);
+	} else {
+		mdss_disable_irq(&hdmi_tx_hw);
+		hdmi_tx_set_mode(hdmi_ctrl, false);
+	}
 
 	if (hdmi_ctrl->hpd_state) {
 		rc = hdmi_tx_enable_power(hdmi_ctrl, HDMI_TX_DDC_PM, 0);
@@ -2957,7 +2979,6 @@ static void hdmi_tx_hpd_off(struct hdmi_tx_ctrl *hdmi_ctrl)
 	if (rc)
 		DEV_INFO("%s: Failed to disable hpd power. Error=%d\n",
 			__func__, rc);
-
 	spin_lock_irqsave(&hdmi_ctrl->hpd_state_lock, flags);
 	hdmi_ctrl->hpd_state = false;
 	spin_unlock_irqrestore(&hdmi_ctrl->hpd_state_lock, flags);
@@ -3003,6 +3024,9 @@ static int hdmi_tx_hpd_on(struct hdmi_tx_ctrl *hdmi_ctrl)
 		}
 
 		DSS_REG_W(io, HDMI_USEC_REFTIMER, 0x0001001B);
+
+		if (IS_CEC_WAKEUP_EN(hdmi_ctrl))
+			mdss_enable_irq_wake(false);
 
 		mdss_enable_irq(&hdmi_tx_hw);
 
@@ -4225,6 +4249,8 @@ static int hdmi_tx_probe(struct platform_device *pdev)
 			msm_dss_enable_clk(
 				hdmi_ctrl->pdata.power_data[i].clk_config,
 				hdmi_ctrl->pdata.power_data[i].num_clk, 1);
+
+			hdmi_tx_vote_power(hdmi_ctrl, i);
 		}
 
 		hdmi_tx_audio_tear_down(hdmi_ctrl);
