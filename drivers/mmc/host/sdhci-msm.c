@@ -2317,12 +2317,11 @@ static void sdhci_msm_check_power_status(struct sdhci_host *host, u32 req_type)
 	 * next call to wait_for_completion returns immediately
 	 * without actually waiting for the IRQ to be handled.
 	 */
+
 	if (done)
 		init_completion(&msm_host->pwr_irq_completion);
-	else if (!wait_for_completion_timeout(&msm_host->pwr_irq_completion,
-				msecs_to_jiffies(MSM_PWR_IRQ_TIMEOUT_MS)))
-		__WARN_printf("%s: request(%d) timed out waiting for pwr_irq\n",
-					mmc_hostname(host->mmc), req_type);
+	else
+		wait_for_completion(&msm_host->pwr_irq_completion);
 
 	pr_debug("%s: %s: request %d done\n", mmc_hostname(host->mmc),
 			__func__, req_type);
