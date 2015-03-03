@@ -937,13 +937,6 @@ static int yas_set_pseudo_irq(struct iio_dev *indio_dev, int enable)
 	return 0;
 }
 
-static int yas_data_rdy_trig_poll(struct iio_dev *indio_dev)
-{
-	struct yas_state *st = iio_priv(indio_dev);
-	iio_trigger_poll(st->trig, iio_get_time_ns());
-	return 0;
-}
-
 static irqreturn_t yas_trigger_handler(int irq, void *p)
 {
 	struct iio_poll_func *pf = p;
@@ -1275,31 +1268,16 @@ static int yas_read_raw(struct iio_dev *indio_dev,
 
 static void yas_work_func(struct work_struct *work)
 {
-	struct yas_data mag[1];
 	struct yas_state *st =
 		container_of((struct delayed_work *)work,
 				struct yas_state, work);
-	struct iio_dev *indio_dev = iio_priv_to_dev(st);
-	uint32_t time_before, time_after;
 	int32_t delay;
-	int ret, i;
 
-	time_before = jiffies_to_msecs(jiffies);
-	mutex_lock(&st->lock);
-	ret = st->mag.measure(mag, 1);
-	if (ret == 1) {
-		for (i = 0; i < 3; i++)
-			st->compass_data[i] = mag[0].xyz.v[i];
-	}
-	mutex_unlock(&st->lock);
-	if (ret == 1)
-		yas_data_rdy_trig_poll(indio_dev);
-	time_after = jiffies_to_msecs(jiffies);
-	delay = MSEC_PER_SEC / st->sampling_frequency
-		- (time_after - time_before);
-	if (delay <= 0)
-		delay = 1;
-	schedule_delayed_work(&st->work, msecs_to_jiffies(delay));
+	delay = MSEC_PER_SEC / st->sampling_frequency;
+	if (delay > 0)
+		schedule_delayed_work(&st->work, msecs_to_jiffies(delay));
+	else
+		schedule_delayed_work(&st->work, 0);
 }
 
 #define YAS_MAGNETOMETER_CHANNEL(axis)				\
