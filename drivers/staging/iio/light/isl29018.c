@@ -612,7 +612,7 @@ static int isl29018_remove(struct i2c_client *client)
 #ifdef CONFIG_PM_SLEEP
 static int isl29018_suspend(struct device *dev)
 {
-	struct isl29018_chip *chip = iio_priv(dev_get_drvdata(dev));
+	struct isl29018_chip *chip = iio_priv(dev_to_iio_dev(dev));
 
 	mutex_lock(&chip->lock);
 
@@ -628,7 +628,7 @@ static int isl29018_suspend(struct device *dev)
 
 static int isl29018_resume(struct device *dev)
 {
-	struct isl29018_chip *chip = iio_priv(dev_get_drvdata(dev));
+	struct isl29018_chip *chip = iio_priv(dev_to_iio_dev(dev));
 	int err;
 
 	mutex_lock(&chip->lock);
