@@ -1297,9 +1297,10 @@ static void yas_work_func(struct work_struct *work)
 	time_after = jiffies_to_msecs(jiffies);
 	delay = MSEC_PER_SEC / st->sampling_frequency
 		- (time_after - time_before);
-	if (delay <= 0)
-		delay = 1;
-	schedule_delayed_work(&st->work, msecs_to_jiffies(delay));
+	if (delay > 0)
+		schedule_delayed_work(&st->work, msecs_to_jiffies(delay));
+	else
+		schedule_delayed_work(&st->work, 0);
 }
 
 #define YAS_MAGNETOMETER_CHANNEL(axis)				\
