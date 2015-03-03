@@ -346,8 +346,8 @@ static ssize_t iio_trigger_write_current(struct device *dev,
 
 	indio_dev->trig = trig;
 
-	if (oldtrig && indio_dev->trig != oldtrig)
-		iio_trigger_put(oldtrig);
+//	if (oldtrig && indio_dev->trig != oldtrig)
+//		iio_trigger_put(oldtrig);
 	if (indio_dev->trig)
 		iio_trigger_get(indio_dev->trig);
 
