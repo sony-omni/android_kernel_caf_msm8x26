@@ -57,7 +57,7 @@ static int ad7606_spi_probe(struct spi_device *spi)
 
 static int ad7606_spi_remove(struct spi_device *spi)
 {
-	struct iio_dev *indio_dev = dev_get_drvdata(&spi->dev);
+	struct iio_dev *indio_dev = dev_to_iio_dev(&spi->dev);
 
 	return ad7606_remove(indio_dev, spi->irq);
 }
@@ -65,7 +65,7 @@ static int ad7606_spi_remove(struct spi_device *spi)
 #ifdef CONFIG_PM
 static int ad7606_spi_suspend(struct device *dev)
 {
-	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 
 	ad7606_suspend(indio_dev);
 
@@ -74,7 +74,7 @@ static int ad7606_spi_suspend(struct device *dev)
 
 static int ad7606_spi_resume(struct device *dev)
 {
-	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 
 	ad7606_resume(indio_dev);
 
