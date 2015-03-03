@@ -851,6 +851,7 @@ struct yas_state {
 	int16_t sampling_frequency;
 	atomic_t pseudo_irq_enable;
 	int32_t compass_data[3];
+        bool trigger_on;
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	struct early_suspend sus;
 #endif
@@ -941,7 +942,7 @@ static int yas_data_rdy_trig_poll(struct iio_dev *indio_dev)
 {
 	struct yas_state *st = iio_priv(indio_dev);
 	iio_trigger_poll(st->trig, iio_get_time_ns());
-	return 0;
+	return IRQ_HANDLED;
 }
 
 static irqreturn_t yas_trigger_handler(int irq, void *p)
