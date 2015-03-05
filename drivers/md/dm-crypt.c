@@ -61,6 +61,7 @@ struct dm_crypt_io {
 	atomic_t io_pending;
 	int error;
 	sector_t sector;
+	struct dm_crypt_io *base_io;
 
 	struct rb_node rb_node;
 } CRYPTO_MINALIGN_ATTR;
@@ -118,6 +119,7 @@ struct crypt_config {
 	 * pool for per bio private data, crypto requests and
 	 * encryption requeusts/buffer pages
 	 */
+	mempool_t *io_pool;
 	mempool_t *req_pool;
 	mempool_t *page_pool;
 	struct bio_set *bs;
@@ -878,10 +880,7 @@ static void crypt_io_init(struct dm_crypt_io *io, struct crypt_config *cc,
 	io->base_bio = bio;
 	io->sector = sector;
 	io->error = 0;
-<<<<<<< HEAD
-=======
 	io->base_io = NULL;
->>>>>>> dm crypt: fix cpu hotplug crash by removing per-cpu structure
 	io->ctx.req = NULL;
 	atomic_set(&io->io_pending, 0);
 }
