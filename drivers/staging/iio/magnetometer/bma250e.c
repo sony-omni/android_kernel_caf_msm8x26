@@ -604,6 +604,10 @@ static int yas_probe_trigger(struct iio_dev *indio_dev)
 	iio_trigger_set_drvdata(st->trig, indio_dev);
 
 	ret = iio_trigger_register(st->trig);
+
+	/* select default trigger */
+	indio_dev->trig = iio_trigger_get(st->trig);
+
 	if (ret)
 		goto error_free_trig;
 	return 0;
@@ -783,36 +787,6 @@ static int yas_read_raw(struct iio_dev *indio_dev,
 	return ret;
 }
 
-static void yas_work_func(struct work_struct *work)
-{
-	struct yas_data acc[1];
-	struct yas_state *st =
-		container_of((struct delayed_work *)work,
-				struct yas_state, work);
-	struct iio_dev *indio_dev = iio_priv_to_dev(st);
-	uint32_t time_before, time_after;
-	int32_t delay;
-	int ret, i;
-
-	time_before = jiffies_to_msecs(jiffies);
-	mutex_lock(&st->lock);
-	ret = st->acc.measure(acc, 1);
-	if (ret == 1) {
-		for (i = 0; i < 3; i++)
-			st->compass_data[i]
-				= acc[0].xyz.v[i] - st->calib_bias[i];
-	}
-	mutex_unlock(&st->lock);
-	if (ret == 1)
-		yas_data_rdy_trig_poll(indio_dev);
-	time_after = jiffies_to_msecs(jiffies);
-	delay = MSEC_PER_SEC / st->sampling_frequency
-		- (time_after - time_before);
-	if (delay <= 0)
-		delay = 1;
-	schedule_delayed_work(&st->work, msecs_to_jiffies(delay));
-}
-
 #define YAS_ACCELEROMETER_CHANNEL(axis)				\
 {								\
 	.type = IIO_ACCEL,					\
@@ -908,7 +882,6 @@ static int yas_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 	st->acc.callback.device_write = yas_device_write;
 	st->acc.callback.usleep = yas_usleep;
 	st->acc.callback.current_time = yas_current_time;
-	INIT_DELAYED_WORK(&st->work, yas_work_func);
 	mutex_init(&st->lock);
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	st->sus.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
