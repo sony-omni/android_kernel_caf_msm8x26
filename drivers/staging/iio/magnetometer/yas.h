@@ -431,7 +431,7 @@ struct yas_acc_driver {
 	 * @retval Negative Failure
 	 */
 	int (*set_position)(int position);
-	int (*self_test)(void);	
+	int (*self_test)(void);
 	/**
 	 * Measures the sensor
 	 * @param[out] raw Measured sensor data
