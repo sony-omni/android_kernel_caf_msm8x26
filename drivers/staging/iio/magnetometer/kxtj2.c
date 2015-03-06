@@ -1107,7 +1107,7 @@ static int yas_remove(struct i2c_client *i2c)
 }
 
 #ifdef CONFIG_PM_SLEEP
-static int yas_suspend(struct device *dev)
+static int kionix_suspend(struct device *dev)
 {
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct yas_state *st = iio_priv(indio_dev);
@@ -1117,7 +1117,7 @@ static int yas_suspend(struct device *dev)
 	return 0;
 }
 
-static int yas_resume(struct device *dev)
+static int kionix_resume(struct device *dev)
 {
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct yas_state *st = iio_priv(indio_dev);
@@ -1127,7 +1127,7 @@ static int yas_resume(struct device *dev)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(yas_pm_ops, yas_suspend, yas_resume);
+static SIMPLE_DEV_PM_OPS(yas_pm_ops, kionix_suspend, kionix_resume);
 #define YAS_PM_OPS (&yas_pm_ops)
 #else
 #define YAS_PM_OPS NULL
