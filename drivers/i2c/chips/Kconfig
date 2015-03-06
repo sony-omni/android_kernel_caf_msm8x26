@@ -1,0 +1,47 @@
+#
+# Miscellaneous I2C chip drivers configuration
+#
+
+menu "Miscellaneous I2C Chip support"
+
+config BOSCH_BMA250
+        tristate "BMA250 acceleration sensor support"
+	depends on I2C=y
+	help
+	  If you say yes here you get support for Bosch Sensortec's
+	  acceleration sensors BMA250.
+
+config BOSCH_BMA250_ENABLE_INT1
+	tristate "BMA250 acceleration sensor interrupt INT1 support"
+	depends on BOSCH_BMA250=y
+        help
+	  If you say yes here you get INT1 support for Bosch Sensortec's
+	  acceleration sensors BMA250
+
+config BOSCH_BMA250_ENABLE_INT2
+	tristate "BMA250 acceleration sensor interrupt INT2 support"
+	depends on BOSCH_BMA250=y
+	help
+	  If you say yes here you get INT2 support for Bosch Sensortec's
+	  acceleration sensors BMA250.
+
+config CIR_ALWAYS_READY
+        bool "BMA250 CIR Always Ready"
+	default n
+	help
+	  Enable CIR Always Ready
+
+config KIONIX_KXTJ2
+        tristate "KXTJ2 acceleration sensor support"
+	depends on I2C=y
+	help
+	  If you say yes here you get support for Kionix Sensortec's
+	  acceleration sensors KXTJ2.
+
+config YAMAHA_YAS532
+        tristate "YAS53x compass sensor support"
+	depends on I2C=y
+	help
+	  If you say yes here you get support for Yamaha Sensortec's
+	  acceleration sensors YAS532.
+endmenu
