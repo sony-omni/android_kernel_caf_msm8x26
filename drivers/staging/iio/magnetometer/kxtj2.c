@@ -898,7 +898,7 @@ static int yas_read_raw(struct iio_dev *indio_dev,
 	return ret;
 }
 
-static void yas_work_func(struct work_struct *work)
+static void kionix_work_func(struct work_struct *work)
 {
 	struct yas_data acc[1];
 	struct yas_state *st =
@@ -1026,7 +1026,7 @@ static int yas_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 	st->acc.callback.device_write = yas_device_write;
 	st->acc.callback.usleep = yas_usleep;
 	st->acc.callback.current_time = yas_current_time;
-	INIT_DELAYED_WORK(&st->work, yas_work_func);
+	INIT_DELAYED_WORK(&st->work, kionix_work_func);
 	mutex_init(&st->lock);
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	st->sus.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
@@ -1107,7 +1107,7 @@ static int yas_remove(struct i2c_client *i2c)
 }
 
 #ifdef CONFIG_PM_SLEEP
-static int yas_suspend(struct device *dev)
+static int kionix_suspend(struct device *dev)
 {
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct yas_state *st = iio_priv(indio_dev);
@@ -1117,7 +1117,7 @@ static int yas_suspend(struct device *dev)
 	return 0;
 }
 
-static int yas_resume(struct device *dev)
+static int kionix_resume(struct device *dev)
 {
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct yas_state *st = iio_priv(indio_dev);
@@ -1127,7 +1127,7 @@ static int yas_resume(struct device *dev)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(yas_pm_ops, yas_suspend, yas_resume);
+static SIMPLE_DEV_PM_OPS(yas_pm_ops, kionix_suspend, kionix_resume);
 #define YAS_PM_OPS (&yas_pm_ops)
 #else
 #define YAS_PM_OPS NULL
