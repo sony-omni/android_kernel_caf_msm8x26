@@ -161,7 +161,6 @@ static int yas_get_enable(void);
 static int yas_set_enable(int enable);
 static int yas_get_position(void);
 static int yas_set_position(int position);
-static int yas_self_test(void);
 static int yas_measure(struct yas_data *raw, int num);
 static int yas_ext(int32_t cmd, void *result);
 
@@ -340,12 +339,6 @@ yas_set_position(int position)
 }
 
 static int
-yas_self_test(void)
-{
-    return YAS_NO_ERROR;
-}
-
-static int
 yas_measure(struct yas_data *raw, int num)
 {
 	uint8_t buf[6];
@@ -410,7 +403,6 @@ yas_acc_driver_init(struct yas_acc_driver *f)
 	f->set_enable = yas_set_enable;
 	f->get_position = yas_get_position;
 	f->set_position = yas_set_position;
-	f->self_test = yas_self_test;
 	f->measure = yas_measure;
 	f->ext = yas_ext;
 	module.cbk = f->callback;
