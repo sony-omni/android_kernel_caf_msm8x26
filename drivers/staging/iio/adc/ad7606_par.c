@@ -120,7 +120,7 @@ static int ad7606_par_remove(struct platform_device *pdev)
 #ifdef CONFIG_PM
 static int ad7606_par_suspend(struct device *dev)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 
 	ad7606_suspend(indio_dev);
 
@@ -129,7 +129,7 @@ static int ad7606_par_suspend(struct device *dev)
 
 static int ad7606_par_resume(struct device *dev)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 
 	ad7606_resume(indio_dev);
 
