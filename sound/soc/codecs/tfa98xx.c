@@ -1760,7 +1760,7 @@ static struct snd_soc_dai_driver tfa98xx_dais[] = {
 			.rates = SNDRV_PCM_RATE_8000_48000,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE,
 		},
-		.ops = &tfa98xx_ops,
+		//.ops = &tfa98xx_ops,
 	},
 };
 
