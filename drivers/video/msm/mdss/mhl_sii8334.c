@@ -1533,21 +1533,29 @@ static int mhl_sii_reg_config(struct i2c_client *client, bool enable)
 	pr_debug("%s\n", __func__);
 
 	if (!enable) {
-		regulator_disable(reg_8941_vdda);
-		regulator_put(reg_8941_vdda);
-		reg_8941_vdda = NULL;
+		if (likely(reg_8941_vdda)) {
+			regulator_disable(reg_8941_vdda);
+			regulator_put(reg_8941_vdda);
+			reg_8941_vdda = NULL;
+		}
 
-		regulator_disable(reg_8941_smps3a);
-		regulator_put(reg_8941_smps3a);
-		reg_8941_smps3a = NULL;
+		if (likely(reg_8941_smps3a)) {
+			regulator_disable(reg_8941_smps3a);
+			regulator_put(reg_8941_smps3a);
+			reg_8941_smps3a = NULL;
+		}
 
-		regulator_disable(reg_8941_l02);
-		regulator_put(reg_8941_l02);
-		reg_8941_l02 = NULL;
+		if (likely(reg_8941_l02)) {
+			regulator_disable(reg_8941_l02);
+			regulator_put(reg_8941_l02);
+			reg_8941_l02 = NULL;
+		}
 
-		regulator_disable(reg_8941_l24);
-		regulator_put(reg_8941_l24);
-		reg_8941_l24 = NULL;
+		if (likely(reg_8941_l24)) {
+			regulator_disable(reg_8941_l24);
+			regulator_put(reg_8941_l24);
+			reg_8941_l24 = NULL;
+		}
 
 		return 0;
 	}
