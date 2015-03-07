@@ -1562,7 +1562,7 @@ static int msm8974_mi2s_startup(struct snd_pcm_substream *substream)
 	int ret = 0;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
-//	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 
 	pr_debug("%s: dai name %s %p\n", __func__, cpu_dai->name, cpu_dai->dev);
 
@@ -1582,10 +1582,10 @@ static int msm8974_mi2s_startup(struct snd_pcm_substream *substream)
 		if (ret < 0)
 			dev_err(cpu_dai->dev, "set format for CPU dai failed\n");
 
-/*		ret = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_CBS_CFS);
+		ret = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_CBS_CFS);
 		if (ret < 0)
 			dev_err(codec_dai->dev, "set format for codec dai failed\n");
-*/
+
 		ret  = 0;
 	}
 	return ret;
