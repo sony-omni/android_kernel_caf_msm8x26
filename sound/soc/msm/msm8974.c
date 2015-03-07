@@ -1421,7 +1421,7 @@ static int msm8974_configure_quat_mi2s_gpio(void)
 		ret = gpio_request(quat_mi2s_gpio[i].gpio_no,
 				quat_mi2s_gpio[i].gpio_name);
 
-		pr_debug("%s: gpio = %d, gpio name = %s, rtn = %d\n", __func__,
+		pr_info("%s: gpio = %d, gpio name = %s, rtn = %d\n", __func__,
 		quat_mi2s_gpio[i].gpio_no, quat_mi2s_gpio[i].gpio_name, ret);
 		gpio_set_value(quat_mi2s_gpio[i].gpio_no, 1);
 
@@ -1564,7 +1564,7 @@ static int msm8974_mi2s_startup(struct snd_pcm_substream *substream)
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 
-	pr_debug("%s: dai name %s %p\n", __func__, cpu_dai->name, cpu_dai->dev);
+	pr_info("%s: dai name %s %p\n", __func__, cpu_dai->name, cpu_dai->dev);
 
 	if (atomic_inc_return(&quat_mi2s_clk.mi2s_rsc_ref) == 1) {
 		pr_info("%s: acquire mi2s resources\n", __func__);
@@ -1597,7 +1597,7 @@ static void msm8974_mi2s_shutdown(struct snd_pcm_substream *substream)
 	int ret = 0;
 
 	if (atomic_dec_return(&quat_mi2s_clk.mi2s_rsc_ref) == 0) {
-		pr_debug("%s: free mi2s resources\n", __func__);
+		pr_info("%s: free mi2s resources\n", __func__);
 //		ret = afe_set_lpass_clock(AFE_PORT_ID_QUATERNARY_MI2S_RX,
 //						&lpass_mi2s_disable);
 		ret = msm8974_mi2s_clk_ctl(rtd, false, substream);
