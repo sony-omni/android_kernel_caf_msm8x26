@@ -33,6 +33,7 @@
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
+#include <linux/irq_work.h>
 
 #include <linux/iio/buffer.h>
 #include <linux/iio/iio.h>
@@ -161,6 +162,7 @@ static int yas_get_enable(void);
 static int yas_set_enable(int enable);
 static int yas_get_position(void);
 static int yas_set_position(int position);
+static int yas_self_test(void);
 static int yas_measure(struct yas_data *raw, int num);
 static int yas_ext(int32_t cmd, void *result);
 
@@ -339,6 +341,12 @@ yas_set_position(int position)
 }
 
 static int
+yas_self_test(void)
+{
+    return YAS_NO_ERROR;
+}
+
+static int
 yas_measure(struct yas_data *raw, int num)
 {
 	uint8_t buf[6];
@@ -403,6 +411,7 @@ yas_acc_driver_init(struct yas_acc_driver *f)
 	f->set_enable = yas_set_enable;
 	f->get_position = yas_get_position;
 	f->set_position = yas_set_position;
+	f->self_test = yas_self_test;
 	f->measure = yas_measure;
 	f->ext = yas_ext;
 	module.cbk = f->callback;
@@ -431,7 +440,11 @@ struct yas_state {
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	struct early_suspend sus;
 #endif
+	struct irq_work iio_irq_work;
+	struct iio_dev *indio_dev;
 };
+
+static struct yas_state *g_st;
 
 static int yas_device_open(int32_t type)
 {
@@ -514,28 +527,25 @@ static int yas_set_pseudo_irq(struct iio_dev *indio_dev, int enable)
 	return 0;
 }
 
-static int yas_data_rdy_trig_poll(struct iio_dev *indio_dev)
+static void yas_data_rdy_trig_poll(struct irq_work *work)
 {
-	struct yas_state *st = iio_priv(indio_dev);
+	struct yas_state *st = g_st;
 	iio_trigger_poll(st->trig, iio_get_time_ns());
-	return 0;
 }
 
 static irqreturn_t yas_trigger_handler(int irq, void *p)
 {
 	struct iio_poll_func *pf = p;
 	struct iio_dev *indio_dev = pf->indio_dev;
-	struct iio_buffer *buffer = indio_dev->buffer;
 	struct yas_state *st = iio_priv(indio_dev);
 	int len = 0, i, j;
-	size_t datasize = buffer->access->get_bytes_per_datum(buffer);
 	int32_t *acc;
 
-	acc = (int32_t *) kmalloc(datasize, GFP_KERNEL);
+	acc = (int32_t *)kmalloc(indio_dev->scan_bytes, GFP_KERNEL);
 	if (acc == NULL) {
 		dev_err(indio_dev->dev.parent,
 				"memory alloc failed in buffer bh");
-		return -ENOMEM;
+		goto done;
 	}
 	if (!bitmap_empty(indio_dev->active_scan_mask, indio_dev->masklength)) {
 		j = 0;
@@ -549,14 +559,13 @@ static irqreturn_t yas_trigger_handler(int irq, void *p)
 	}
 
 	/* Guaranteed to be aligned with 8 byte boundary */
-	if (buffer->scan_timestamp)
-		*(s64 *)(((phys_addr_t)acc + len
-					+ sizeof(s64) - 1) & ~(sizeof(s64) - 1))
-			= pf->timestamp;
-	iio_push_to_buffers(indio_dev, (u8 *)acc);
+	if (indio_dev->scan_timestamp)
+			*(s64 *)((u8 *)acc + ALIGN(len, sizeof(s64))) = pf->timestamp;
 
-	iio_trigger_notify_done(indio_dev->trig);
+	iio_push_to_buffers(indio_dev, (u8 *)acc);
 	kfree(acc);
+done:
+	iio_trigger_notify_done(indio_dev->trig);
 	return IRQ_HANDLED;
 }
 
@@ -781,7 +790,6 @@ static void yas_work_func(struct work_struct *work)
 	struct yas_state *st =
 		container_of((struct delayed_work *)work,
 				struct yas_state, work);
-	struct iio_dev *indio_dev = iio_priv_to_dev(st);
 	uint32_t time_before, time_after;
 	int32_t delay;
 	int ret, i;
@@ -796,7 +804,7 @@ static void yas_work_func(struct work_struct *work)
 	}
 	mutex_unlock(&st->lock);
 	if (ret == 1)
-		yas_data_rdy_trig_poll(indio_dev);
+		yas_data_rdy_trig_poll(&st->iio_irq_work);
 	time_after = jiffies_to_msecs(jiffies);
 	delay = MSEC_PER_SEC / st->sampling_frequency
 		- (time_after - time_before);
@@ -900,6 +908,7 @@ static int yas_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 	st->acc.callback.device_write = yas_device_write;
 	st->acc.callback.usleep = yas_usleep;
 	st->acc.callback.current_time = yas_current_time;
+	st->indio_dev = indio_dev;
 	INIT_DELAYED_WORK(&st->work, yas_work_func);
 	mutex_init(&st->lock);
 #ifdef CONFIG_HAS_EARLYSUSPEND
