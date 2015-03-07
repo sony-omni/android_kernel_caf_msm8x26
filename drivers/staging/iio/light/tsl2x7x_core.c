@@ -1943,7 +1943,7 @@ fail1:
 
 static int tsl2x7x_suspend(struct device *dev)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct tsl2X7X_chip *chip = iio_priv(indio_dev);
 	int ret = 0;
 
@@ -1962,7 +1962,7 @@ static int tsl2x7x_suspend(struct device *dev)
 
 static int tsl2x7x_resume(struct device *dev)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct tsl2X7X_chip *chip = iio_priv(indio_dev);
 	int ret = 0;
 
