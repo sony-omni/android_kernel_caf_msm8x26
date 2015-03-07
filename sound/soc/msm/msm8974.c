@@ -232,6 +232,8 @@ struct msm8974_asoc_mach_data {
 	int us_euro_gpio;
 	struct msm_auxpcm_ctrl *pri_auxpcm_ctrl;
 	struct msm_auxpcm_ctrl *sec_auxpcm_ctrl;
+	u32 quad_rx_clk_usrs;
+	u32 quad_tx_clk_usrs;
 };
 
 #define GPIO_NAME_INDEX 0
@@ -1445,20 +1447,132 @@ static int msm8974_quat_mi2s_free_gpios(void)
 	return 0;
 }
 
+static int msm8974_mi2s_clk_ctl(struct snd_soc_pcm_runtime *rtd,
+				bool enable,
+				struct snd_pcm_substream *substream)
+{
+	struct snd_soc_card *card = rtd->card;
+	struct msm8974_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
+	struct afe_clk_cfg *lpass_clk = NULL;
+	int ret = 0;
+	u32 afe_port_id;
+
+	if (pdata == NULL) {
+		pr_err("%s:platform data is null\n", __func__);
+		return -EINVAL;
+	}
+
+	lpass_clk = kzalloc(sizeof(struct afe_clk_cfg), GFP_KERNEL);
+	if (lpass_clk == NULL) {
+		pr_err("%s:Failed to allocate memory\n", __func__);
+		return -ENOMEM;
+	}
+
+	memcpy(lpass_clk, &lpass_mi2s_enable, sizeof(struct afe_clk_cfg));
+
+	if (enable) {
+		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+			afe_port_id = AFE_PORT_ID_QUATERNARY_MI2S_RX;
+
+			if (pdata->quad_rx_clk_usrs == 0) {
+				lpass_clk->clk_val1 =
+					    Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
+				lpass_clk->clk_set_mode =
+						Q6AFE_LPASS_MODE_CLK1_VALID;
+			}
+
+			ret = afe_set_lpass_clock(afe_port_id, lpass_clk);
+			if (ret < 0) {
+				pr_err("%s:afe_set_lpass_clock failed with %d\n",
+					__func__, ret);
+				goto err;
+			} else
+				pdata->quad_rx_clk_usrs++;
+		} else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
+			afe_port_id = AFE_PORT_ID_QUATERNARY_MI2S_TX;
+
+			if (pdata->quad_tx_clk_usrs == 0) {
+				lpass_clk->clk_val1 =
+					    Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ;
+				lpass_clk->clk_set_mode =
+						Q6AFE_LPASS_MODE_CLK1_VALID;
+			}
+
+			ret = afe_set_lpass_clock(afe_port_id, lpass_clk);
+			if (ret < 0) {
+				pr_err("%s:afe_set_lpass_clock failed with %d\n",
+					__func__, ret);
+				goto err;
+			} else
+				pdata->quad_tx_clk_usrs++;
+		}
+	} else {
+		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+			afe_port_id = AFE_PORT_ID_QUATERNARY_MI2S_RX;
+
+			if (pdata->quad_rx_clk_usrs > 0)
+				pdata->quad_rx_clk_usrs--;
+
+			if (pdata->quad_rx_clk_usrs == 0) {
+				lpass_clk->clk_val1 =
+						Q6AFE_LPASS_IBIT_CLK_DISABLE;
+				lpass_clk->clk_set_mode =
+						Q6AFE_LPASS_MODE_CLK1_VALID;
+			}
+
+			ret = afe_set_lpass_clock(afe_port_id, lpass_clk);
+			if (ret < 0) {
+				pr_err("%s:afe_set_lpass_clock failed with %d\n",
+					__func__, ret);
+				goto err;
+			}
+		} else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
+			afe_port_id = AFE_PORT_ID_QUATERNARY_MI2S_TX;
+
+			if (pdata->quad_tx_clk_usrs > 0)
+				pdata->quad_tx_clk_usrs--;
+
+			if (pdata->quad_tx_clk_usrs == 0) {
+				lpass_clk->clk_val1 =
+						Q6AFE_LPASS_IBIT_CLK_DISABLE;
+				lpass_clk->clk_set_mode =
+						Q6AFE_LPASS_MODE_CLK1_VALID;
+			}
+
+			ret = afe_set_lpass_clock(afe_port_id, lpass_clk);
+			if (ret < 0) {
+				pr_err("%s:afe_set_lpass_clock failed with %d\n",
+					__func__, ret);
+				goto err;
+			}
+		}
+	}
+	pr_debug("%s: clk 1 = 0x%x clk2 = 0x%x mode = 0x%x\n",
+			 __func__, lpass_clk->clk_val1,
+			lpass_clk->clk_val2,
+			lpass_clk->clk_set_mode);
+	ret = 0;
+err:
+	kfree(lpass_clk);
+	return ret;	
+}
+
 static int msm8974_mi2s_startup(struct snd_pcm_substream *substream)
 {
 	int ret = 0;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
-	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+//	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 
 	pr_debug("%s: dai name %s %p\n", __func__, cpu_dai->name, cpu_dai->dev);
 
 	if (atomic_inc_return(&quat_mi2s_clk.mi2s_rsc_ref) == 1) {
 		pr_info("%s: acquire mi2s resources\n", __func__);
 		msm8974_configure_quat_mi2s_gpio();
-		ret = afe_set_lpass_clock(AFE_PORT_ID_QUATERNARY_MI2S_RX,
-						&lpass_mi2s_enable);
+
+//		ret = afe_set_lpass_clock(AFE_PORT_ID_QUATERNARY_MI2S_RX,
+//						&lpass_mi2s_enable);
+		ret = msm8974_mi2s_clk_ctl(rtd, true, substream);
 		if (ret < 0) {
 			pr_err("%s: afe_set_lpass_clock failed\n", __func__);
 			return ret;
@@ -1468,10 +1582,10 @@ static int msm8974_mi2s_startup(struct snd_pcm_substream *substream)
 		if (ret < 0)
 			dev_err(cpu_dai->dev, "set format for CPU dai failed\n");
 
-		ret = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_CBS_CFS);
+/*		ret = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_CBS_CFS);
 		if (ret < 0)
 			dev_err(codec_dai->dev, "set format for codec dai failed\n");
-
+*/
 		ret  = 0;
 	}
 	return ret;
@@ -1479,12 +1593,14 @@ static int msm8974_mi2s_startup(struct snd_pcm_substream *substream)
 
 static void msm8974_mi2s_shutdown(struct snd_pcm_substream *substream)
 {
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	int ret = 0;
 
 	if (atomic_dec_return(&quat_mi2s_clk.mi2s_rsc_ref) == 0) {
 		pr_debug("%s: free mi2s resources\n", __func__);
-		ret = afe_set_lpass_clock(AFE_PORT_ID_QUATERNARY_MI2S_RX,
-						&lpass_mi2s_disable);
+//		ret = afe_set_lpass_clock(AFE_PORT_ID_QUATERNARY_MI2S_RX,
+//						&lpass_mi2s_disable);
+		ret = msm8974_mi2s_clk_ctl(rtd, false, substream);
 		if (ret < 0)
 			pr_err("%s: afe_set_lpass_clock failed\n", __func__);
 
@@ -1492,9 +1608,35 @@ static void msm8974_mi2s_shutdown(struct snd_pcm_substream *substream)
 	}
 }
 
+static int msm8974_mi2s_hw_params(struct snd_pcm_substream *substream,
+			struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	int ret;
+
+	/* if it is msm stub dummy codec dai, it doesnt support this op
+	* causes an unneseccary failure to startup path. */
+
+	if (strncmp(codec_dai->name, "msm-stub-tx", 11) &&
+			strncmp(codec_dai->name, "snd-soc-dummy-dai", 17)) {
+		ret = snd_soc_dai_set_sysclk(codec_dai, 0,
+			Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ,
+			SND_SOC_CLOCK_IN);
+
+		if (ret < 0) {
+			pr_err("can't set rx codec clk configuration\n");
+			return ret;
+		}
+	}
+
+	return 1;
+}
+
 static struct snd_soc_ops msm8974_mi2s_be_ops = {
 	.startup = msm8974_mi2s_startup,
-	.shutdown = msm8974_mi2s_shutdown
+	.shutdown = msm8974_mi2s_shutdown,
+//	.hw_params = msm8974_mi2s_hw_params,
 };
 #endif
 
