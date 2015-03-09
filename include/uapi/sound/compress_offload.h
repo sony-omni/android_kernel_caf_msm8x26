@@ -81,7 +81,7 @@ struct snd_compr_tstamp {
 struct snd_compr_avail {
 	__u64 avail;
 	struct snd_compr_tstamp tstamp;
-};
+} __attribute__((packed));
 
 enum snd_compr_direction {
 	SND_COMPRESS_PLAYBACK = 0,
@@ -141,6 +141,8 @@ struct snd_compr_audio_info {
 enum {
 	SNDRV_COMPRESS_ENCODER_PADDING = 1,
 	SNDRV_COMPRESS_ENCODER_DELAY = 2,
+	SNDRV_COMPRESS_MIN_BLK_SIZE = 3,
+	SNDRV_COMPRESS_MAX_BLK_SIZE = 4,
 };
 
 /**

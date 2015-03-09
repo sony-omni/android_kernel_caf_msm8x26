@@ -41,7 +41,6 @@
 #include <linux/iopoll.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/msm-bus.h>
-#include <mach/gpio.h>
 
 #include "sdhci-pltfm.h"
 
@@ -204,9 +203,6 @@ enum sdc_mpm_pin_state {
 #define NUM_TUNING_PHASES		16
 #define MAX_DRV_TYPES_SUPPORTED_HS200	3
 
-/* Timeout value to avoid infinite waiting for pwr_irq */
-#define MSM_PWR_IRQ_TIMEOUT_MS 5000
-
 static const u32 tuning_block_64[] = {
 	0x00FF0FFF, 0xCCC3CCFF, 0xFFCC3CC3, 0xEFFEFFFE,
 	0xDDFFDFFF, 0xFBFFFBFF, 0xFF7FFFBF, 0xEFBDF777,
@@ -273,34 +269,6 @@ struct sdhci_msm_gpio_data {
 	u8 size;
 };
 
-struct sdhci_msm_pad_pull {
-	enum msm_tlmm_pull_tgt no;
-	u32 val;
-};
-
-struct sdhci_msm_pad_pull_data {
-	struct sdhci_msm_pad_pull *on;
-	struct sdhci_msm_pad_pull *off;
-	u8 size;
-};
-
-struct sdhci_msm_pad_drv {
-	enum msm_tlmm_hdrive_tgt no;
-	u32 val;
-};
-
-struct sdhci_msm_pad_drv_data {
-	struct sdhci_msm_pad_drv *on;
-	struct sdhci_msm_pad_drv *off;
-	u8 size;
-};
-
-struct sdhci_msm_pad_data {
-	struct sdhci_msm_pad_pull_data *pull;
-	struct sdhci_msm_pad_drv_data *drv;
-};
-
-
 struct sdhci_msm_pin_data {
 	/*
 	 * = 1 if controller pins are using gpios
@@ -308,7 +276,6 @@ struct sdhci_msm_pin_data {
 	 */
 	u8 is_gpio;
 	struct sdhci_msm_gpio_data *gpio_data;
-	struct sdhci_msm_pad_data *pad_data;
 };
 
 struct sdhci_pinctrl_data {
@@ -1013,7 +980,7 @@ int sdhci_msm_execute_tuning(struct sdhci_host *host, u32 opcode)
 {
 	unsigned long flags;
 	int tuning_seq_cnt = 3;
-	u8 phase, *data_buf, tuned_phases[16], tuned_phase_cnt = 0;
+	u8 phase, *data_buf, tuned_phases[NUM_TUNING_PHASES], tuned_phase_cnt;
 	const u32 *tuning_block_pattern = tuning_block_64;
 	int size = sizeof(tuning_block_64); /* Tuning pattern size in bytes */
 	int rc;
@@ -1113,7 +1080,10 @@ retry:
 			!memcmp(data_buf, tuning_block_pattern, size)) {
 			/* tuning is successful at this tuning point */
 			tuned_phases[tuned_phase_cnt++] = phase;
-			pr_debug("%s: %s: found good phase = %d\n",
+			pr_debug("%s: %s: found *** good *** phase = %d\n",
+				mmc_hostname(mmc), __func__, phase);
+		} else {
+			pr_debug("%s: %s: found ## bad ## phase = %d\n",
 				mmc_hostname(mmc), __func__, phase);
 		}
 	} while (++phase < 16);
@@ -1227,33 +1197,6 @@ free_gpios:
 	return ret;
 }
 
-static int sdhci_msm_setup_pad(struct sdhci_msm_pltfm_data *pdata, bool enable)
-{
-	struct sdhci_msm_pad_data *curr;
-	int i;
-
-	curr = pdata->pin_data->pad_data;
-	for (i = 0; i < curr->drv->size; i++) {
-		if (enable)
-			msm_tlmm_set_hdrive(curr->drv->on[i].no,
-				curr->drv->on[i].val);
-		else
-			msm_tlmm_set_hdrive(curr->drv->off[i].no,
-				curr->drv->off[i].val);
-	}
-
-	for (i = 0; i < curr->pull->size; i++) {
-		if (enable)
-			msm_tlmm_set_pull(curr->pull->on[i].no,
-				curr->pull->on[i].val);
-		else
-			msm_tlmm_set_pull(curr->pull->off[i].no,
-				curr->pull->off[i].val);
-	}
-
-	return 0;
-}
-
 static int sdhci_msm_setup_pinctrl(struct sdhci_msm_pltfm_data *pdata,
 		bool enable)
 {
@@ -1287,8 +1230,6 @@ static int sdhci_msm_setup_pins(struct sdhci_msm_pltfm_data *pdata, bool enable)
 	}
 	if (pdata->pin_data->is_gpio)
 		ret = sdhci_msm_setup_gpio(pdata, enable);
-	else
-		ret = sdhci_msm_setup_pad(pdata, enable);
 out:
 	if (!ret)
 		pdata->pin_cfg_sts = enable;
@@ -1401,158 +1342,6 @@ static int sdhci_msm_dt_parse_vreg_info(struct device *dev,
 }
 
 /* GPIO/Pad data extraction */
-static int sdhci_msm_dt_get_pad_pull_info(struct device *dev, int id,
-		struct sdhci_msm_pad_pull_data **pad_pull_data)
-{
-	int ret = 0, base = 0, len, i;
-	u32 *tmp;
-	struct sdhci_msm_pad_pull_data *pull_data;
-	struct sdhci_msm_pad_pull *pull;
-
-	switch (id) {
-	case 1:
-		base = TLMM_PULL_SDC1_CLK;
-		break;
-	case 2:
-		base = TLMM_PULL_SDC2_CLK;
-		break;
-	case 3:
-		base = TLMM_PULL_SDC3_CLK;
-		break;
-	case 4:
-		base = TLMM_PULL_SDC4_CLK;
-		break;
-	default:
-		dev_err(dev, "%s: Invalid slot id\n", __func__);
-		ret = -EINVAL;
-		goto out;
-	}
-
-	pull_data = devm_kzalloc(dev, sizeof(struct sdhci_msm_pad_pull_data),
-			GFP_KERNEL);
-	if (!pull_data) {
-		dev_err(dev, "No memory for msm_mmc_pad_pull_data\n");
-		ret = -ENOMEM;
-		goto out;
-	}
-	pull_data->size = 4; /* array size for clk, cmd, data and rclk */
-
-	/* Allocate on, off configs for clk, cmd, data and rclk */
-	pull = devm_kzalloc(dev, 2 * pull_data->size *\
-			sizeof(struct sdhci_msm_pad_pull), GFP_KERNEL);
-	if (!pull) {
-		dev_err(dev, "No memory for msm_mmc_pad_pull\n");
-		ret = -ENOMEM;
-		goto out;
-	}
-	pull_data->on = pull;
-	pull_data->off = pull + pull_data->size;
-
-	ret = sdhci_msm_dt_get_array(dev, "qcom,pad-pull-on",
-			&tmp, &len, pull_data->size);
-	if (ret)
-		goto out;
-
-	for (i = 0; i < len; i++) {
-		pull_data->on[i].no = base + i;
-		pull_data->on[i].val = tmp[i];
-		dev_dbg(dev, "%s: val[%d]=0x%x\n", __func__,
-				i, pull_data->on[i].val);
-	}
-
-	ret = sdhci_msm_dt_get_array(dev, "qcom,pad-pull-off",
-			&tmp, &len, pull_data->size);
-	if (ret)
-		goto out;
-
-	for (i = 0; i < len; i++) {
-		pull_data->off[i].no = base + i;
-		pull_data->off[i].val = tmp[i];
-		dev_dbg(dev, "%s: val[%d]=0x%x\n", __func__,
-				i, pull_data->off[i].val);
-	}
-
-	*pad_pull_data = pull_data;
-out:
-	return ret;
-}
-
-static int sdhci_msm_dt_get_pad_drv_info(struct device *dev, int id,
-		struct sdhci_msm_pad_drv_data **pad_drv_data)
-{
-	int ret = 0, base = 0, len, i;
-	u32 *tmp;
-	struct sdhci_msm_pad_drv_data *drv_data;
-	struct sdhci_msm_pad_drv *drv;
-
-	switch (id) {
-	case 1:
-		base = TLMM_HDRV_SDC1_CLK;
-		break;
-	case 2:
-		base = TLMM_HDRV_SDC2_CLK;
-		break;
-	case 3:
-		base = TLMM_HDRV_SDC3_CLK;
-		break;
-	case 4:
-		base = TLMM_HDRV_SDC4_CLK;
-		break;
-	default:
-		dev_err(dev, "%s: Invalid slot id\n", __func__);
-		ret = -EINVAL;
-		goto out;
-	}
-
-	drv_data = devm_kzalloc(dev, sizeof(struct sdhci_msm_pad_drv_data),
-			GFP_KERNEL);
-	if (!drv_data) {
-		dev_err(dev, "No memory for msm_mmc_pad_drv_data\n");
-		ret = -ENOMEM;
-		goto out;
-	}
-	drv_data->size = 3; /* array size for clk, cmd, data */
-
-	/* Allocate on, off configs for clk, cmd, data */
-	drv = devm_kzalloc(dev, 2 * drv_data->size *\
-			sizeof(struct sdhci_msm_pad_drv), GFP_KERNEL);
-	if (!drv) {
-		dev_err(dev, "No memory msm_mmc_pad_drv\n");
-		ret = -ENOMEM;
-		goto out;
-	}
-	drv_data->on = drv;
-	drv_data->off = drv + drv_data->size;
-
-	ret = sdhci_msm_dt_get_array(dev, "qcom,pad-drv-on",
-			&tmp, &len, drv_data->size);
-	if (ret)
-		goto out;
-
-	for (i = 0; i < len; i++) {
-		drv_data->on[i].no = base + i;
-		drv_data->on[i].val = tmp[i];
-		dev_dbg(dev, "%s: val[%d]=0x%x\n", __func__,
-				i, drv_data->on[i].val);
-	}
-
-	ret = sdhci_msm_dt_get_array(dev, "qcom,pad-drv-off",
-			&tmp, &len, drv_data->size);
-	if (ret)
-		goto out;
-
-	for (i = 0; i < len; i++) {
-		drv_data->off[i].no = base + i;
-		drv_data->off[i].val = tmp[i];
-		dev_dbg(dev, "%s: val[%d]=0x%x\n", __func__,
-				i, drv_data->off[i].val);
-	}
-
-	*pad_drv_data = drv_data;
-out:
-	return ret;
-}
-
 static int sdhci_msm_parse_pinctrl_info(struct device *dev,
 		struct sdhci_msm_pltfm_data *pdata)
 {
@@ -1597,7 +1386,7 @@ out:
 static int sdhci_msm_dt_parse_gpio_info(struct device *dev,
 		struct sdhci_msm_pltfm_data *pdata)
 {
-	int ret = 0, id = 0, cnt, i;
+	int ret = 0, cnt, i;
 	struct sdhci_msm_pin_data *pin_data;
 	struct device_node *np = dev->of_node;
 
@@ -1610,6 +1399,7 @@ static int sdhci_msm_dt_parse_gpio_info(struct device *dev,
 	} else {
 		dev_err(dev, "Parsing Pinctrl failed with %d, falling back on GPIO lib\n",
 			ret);
+		ret = 0;
 	}
 	pin_data = devm_kzalloc(dev, sizeof(*pin_data), GFP_KERNEL);
 	if (!pin_data) {
@@ -1651,34 +1441,6 @@ static int sdhci_msm_dt_parse_gpio_info(struct device *dev,
 				pin_data->gpio_data->gpio[i].name,
 				pin_data->gpio_data->gpio[i].no);
 		}
-	} else {
-		pin_data->pad_data =
-			devm_kzalloc(dev,
-				     sizeof(struct sdhci_msm_pad_data),
-				     GFP_KERNEL);
-		if (!pin_data->pad_data) {
-			dev_err(dev,
-				"No memory for pin_data->pad_data\n");
-			ret = -ENOMEM;
-			goto out;
-		}
-
-		ret = of_alias_get_id(np, "sdhc");
-		if (ret < 0) {
-			dev_err(dev, "Failed to get slot index %d\n", ret);
-			goto out;
-		}
-		id = ret;
-
-		ret = sdhci_msm_dt_get_pad_pull_info(
-			dev, id, &pin_data->pad_data->pull);
-		if (ret)
-			goto out;
-		ret = sdhci_msm_dt_get_pad_drv_info(
-			dev, id, &pin_data->pad_data->drv);
-		if (ret)
-			goto out;
-
 	}
 	pdata->pin_data = pin_data;
 out:
@@ -2555,12 +2317,11 @@ static void sdhci_msm_check_power_status(struct sdhci_host *host, u32 req_type)
 	 * next call to wait_for_completion returns immediately
 	 * without actually waiting for the IRQ to be handled.
 	 */
+
 	if (done)
 		init_completion(&msm_host->pwr_irq_completion);
-	else if (!wait_for_completion_timeout(&msm_host->pwr_irq_completion,
-				msecs_to_jiffies(MSM_PWR_IRQ_TIMEOUT_MS)))
-		__WARN_printf("%s: request(%d) timed out waiting for pwr_irq\n",
-					mmc_hostname(host->mmc), req_type);
+	else
+		wait_for_completion(&msm_host->pwr_irq_completion);
 
 	pr_debug("%s: %s: request %d done\n", mmc_hostname(host->mmc),
 			__func__, req_type);
@@ -3557,6 +3318,7 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 		}
 	}
 
+	device_enable_async_suspend(&pdev->dev);
 	/* Successful initialization */
 	goto out;
 
@@ -3636,7 +3398,7 @@ static int sdhci_msm_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_PM_RUNTIME
+#ifdef CONFIG_PM
 static int sdhci_msm_cfg_sdio_wakeup(struct sdhci_host *host, bool enable)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
@@ -3789,7 +3551,9 @@ static int sdhci_msm_resume(struct device *dev)
 out:
 	return ret;
 }
+#endif
 
+#ifdef CONFIG_PM
 static int sdhci_msm_suspend_noirq(struct device *dev)
 {
 	struct sdhci_host *host = dev_get_drvdata(dev);
@@ -3809,9 +3573,7 @@ static int sdhci_msm_suspend_noirq(struct device *dev)
 
 	return ret;
 }
-#endif
 
-#ifdef CONFIG_PM
 static const struct dev_pm_ops sdhci_msm_pmops = {
 	SET_SYSTEM_SLEEP_PM_OPS(sdhci_msm_suspend, sdhci_msm_resume)
 	SET_RUNTIME_PM_OPS(sdhci_msm_runtime_suspend, sdhci_msm_runtime_resume,

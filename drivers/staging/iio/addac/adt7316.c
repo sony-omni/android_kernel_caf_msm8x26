@@ -2092,7 +2092,7 @@ static struct attribute_group adt7516_event_attribute_group = {
 #ifdef CONFIG_PM_SLEEP
 static int adt7316_disable(struct device *dev)
 {
-	struct iio_dev *dev_info = dev_get_drvdata(dev);
+	struct iio_dev *dev_info = dev_to_iio_dev(dev);
 	struct adt7316_chip_info *chip = iio_priv(dev_info);
 
 	return _adt7316_store_enabled(chip, 0);
@@ -2100,7 +2100,7 @@ static int adt7316_disable(struct device *dev)
 
 static int adt7316_enable(struct device *dev)
 {
-	struct iio_dev *dev_info = dev_get_drvdata(dev);
+	struct iio_dev *dev_info = dev_to_iio_dev(dev);
 	struct adt7316_chip_info *chip = iio_priv(dev_info);
 
 	return _adt7316_store_enabled(chip, 1);
@@ -2218,7 +2218,7 @@ EXPORT_SYMBOL(adt7316_probe);
 
 int adt7316_remove(struct device *dev)
 {
-	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct adt7316_chip_info *chip = iio_priv(indio_dev);
 
 	iio_device_unregister(indio_dev);
