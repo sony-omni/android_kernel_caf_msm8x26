@@ -258,7 +258,7 @@ static ssize_t hmc5843_show_operating_mode(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct hmc5843_data *data = iio_priv(indio_dev);
 	return sprintf(buf, "%d\n", data->operating_mode);
 }
@@ -268,7 +268,7 @@ static ssize_t hmc5843_set_operating_mode(struct device *dev,
 				const char *buf,
 				size_t count)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct i2c_client *client = to_i2c_client(indio_dev->dev.parent);
 	struct hmc5843_data *data = iio_priv(indio_dev);
 	struct iio_dev_attr *this_attr = to_iio_dev_attr(attr);
@@ -340,7 +340,7 @@ static ssize_t hmc5843_show_measurement_configuration(struct device *dev,
 						struct device_attribute *attr,
 						char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct hmc5843_data *data = iio_priv(indio_dev);
 	return sprintf(buf, "%d\n", data->meas_conf);
 }
@@ -350,7 +350,7 @@ static ssize_t hmc5843_set_measurement_configuration(struct device *dev,
 						const char *buf,
 						size_t count)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct i2c_client *client = to_i2c_client(indio_dev->dev.parent);
 	struct hmc5843_data *data = iio_priv(indio_dev);
 	unsigned long meas_conf = 0;
@@ -385,7 +385,7 @@ static ssize_t hmc5843_show_sampling_frequencies_available(struct device *dev,
 						struct device_attribute *attr,
 						char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct hmc5843_data *data = iio_priv(indio_dev);
 	ssize_t total_n = 0;
 	int i;
@@ -439,7 +439,7 @@ static ssize_t hmc5843_set_sampling_frequency(struct device *dev,
 					const char *buf, size_t count)
 {
 
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct i2c_client *client = to_i2c_client(indio_dev->dev.parent);
 	struct hmc5843_data *data = iio_priv(indio_dev);
 	int rate;
@@ -467,7 +467,7 @@ exit:
 static ssize_t hmc5843_show_sampling_frequency(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct i2c_client *client = to_i2c_client(indio_dev->dev.parent);
 	struct iio_dev_attr *this_attr = to_iio_dev_attr(attr);
 	struct hmc5843_data *data = iio_priv(indio_dev);
@@ -491,7 +491,7 @@ static ssize_t hmc5843_show_range_gain(struct device *dev,
 				char *buf)
 {
 	u8 range;
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct hmc5843_data *data = iio_priv(indio_dev);
 
 	range = data->range;
@@ -503,7 +503,7 @@ static ssize_t hmc5843_set_range_gain(struct device *dev,
 			const char *buf,
 			size_t count)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct i2c_client *client = to_i2c_client(indio_dev->dev.parent);
 	struct iio_dev_attr *this_attr = to_iio_dev_attr(attr);
 	struct hmc5843_data *data = iio_priv(indio_dev);
