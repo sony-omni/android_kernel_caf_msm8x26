@@ -37,12 +37,29 @@
 #include <linux/iio/buffer.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
-#include <linux/iio/kfifo_buf.h>
 #include <linux/iio/trigger.h>
 #include <linux/iio/trigger_consumer.h>
+#include <linux/iio/kfifo_buf.h>
 #include <linux/irq_work.h>
-#include <linux/of_gpio.h>
+
 #include "yas.h"
+
+#include <linux/of_gpio.h>
+
+static int DEBUG_FLAG_GSENSOR;
+module_param(DEBUG_FLAG_GSENSOR, int, 0600);
+
+#define D(x...) printk(KERN_DEBUG "[GSNR][KXTJ2] " x)
+#define I(x...) printk(KERN_INFO "[GSNR][KXTJ2] " x)
+#define W(x...) printk(KERN_WARNING "[GSNR][KXTJ2] " x)
+#define E(x...) printk(KERN_ERR "[GSNR][KXTJ2] " x)
+
+#define IIF(x...) {\
+		if (DEBUG_FLAG_GSENSOR)\
+			printk(KERN_INFO "[GSNR][KXTJ2 DEBUG] " x); }
+
+#define CALIBRATION_DATA_PATH "/calibration_data"
+#define G_SENSOR_FLASH_DATA "gs_flash"
 
 #define YAS_RANGE_2G                                                         (0)
 #define YAS_RANGE_4G                                                         (1)
@@ -58,20 +75,7 @@
 #define YAS_RESOLUTION                                                    (1024)
 #endif
 #define YAS_GRAVITY_EARTH                                              (9806550)
-/*
-   YAS_POWERUP_TIME
-
-   Waiting time (max.) is required after powerup, but wating time (max.) is
-   unknown. So, waiting time (max.) is assumed here as 20 [msec], twice the
-   powerup time typical: 10 [msec].
-*/
 #define YAS_POWERUP_TIME                                                 (20000)
-/*
-   YAS_SOFTRESET_WAIT_TIME
-
-   Waiting time is required after softreset, but waiting time is unknown.
-   So, waiting time is assumed here as 1 [msec].
-*/
 #define YAS_SOFTRESET_WAIT_TIME                                           (1000)
 #define YAS_SOFTRESET_COUNT_MAX                                             (20)
 #define YAS_DEFAULT_POSITION                                                 (0)
@@ -149,14 +153,14 @@ static const struct yas_odr yas_odr_tbl[] = {
 };
 
 static const int8_t yas_position_map[][3][3] = {
-	{ { 0, -1,  0}, { 1,  0,  0}, { 0,  0,  1} },/* top/upper-left */
-	{ { 1,  0,  0}, { 0,  1,  0}, { 0,  0,  1} },/* top/upper-right */
-	{ { 0,  1,  0}, {-1,  0,  0}, { 0,  0,  1} },/* top/lower-right */
-	{ {-1,  0,  0}, { 0, -1,  0}, { 0,  0,  1} },/* top/lower-left */
-	{ { 0,  1,  0}, { 1,  0,  0}, { 0,  0, -1} },/* bottom/upper-right */
-	{ {-1,  0,  0}, { 0,  1,  0}, { 0,  0, -1} },/* bottom/upper-left */
-	{ { 0, -1,  0}, {-1,  0,  0}, { 0,  0, -1} },/* bottom/lower-left */
-	{ { 1,  0,  0}, { 0, -1,  0}, { 0,  0, -1} },/* bottom/lower-right */
+	{ { 0, -1,  0}, { 1,  0,  0}, { 0,  0,  1} },
+	{ { 1,  0,  0}, { 0,  1,  0}, { 0,  0,  1} },
+	{ { 0,  1,  0}, {-1,  0,  0}, { 0,  0,  1} },
+	{ {-1,  0,  0}, { 0, -1,  0}, { 0,  0,  1} },
+	{ { 0,  1,  0}, { 1,  0,  0}, { 0,  0, -1} },
+	{ {-1,  0,  0}, { 0,  1,  0}, { 0,  0, -1} },
+	{ { 0, -1,  0}, {-1,  0,  0}, { 0,  0, -1} },
+	{ { 1,  0,  0}, { 0, -1,  0}, { 0,  0, -1} },
 };
 
 static struct yas_module module;
@@ -320,6 +324,8 @@ yas_set_enable(int enable)
 {
 	int rt;
 
+	I("%s: enable = %d\n", __func__, enable);
+
 	if (!module.initialized)
 		return YAS_ERROR_INITIALIZE;
 	if (enable != 0)
@@ -364,11 +370,11 @@ yas_set_position(int position)
 
 #define KIONIX_AUTO_CAL
 #ifdef KIONIX_AUTO_CAL
-#define Sensitivity_def	1024	//	
+#define Sensitivity_def	1024	//
 #define Detection_range 205 	// Follow KXTJ2 SPEC Offset Range define
 #define Stable_range 50     	// Stable iteration
-#define BUF_RANGE_Limit 30 	
-static int BUF_RANGE = BUF_RANGE_Limit;			
+#define BUF_RANGE_Limit 30
+static int BUF_RANGE = BUF_RANGE_Limit;
 static int temp_zbuf[50]={0};
 static int temp_zsum = 0; // 1024 * BUF_RANGE ;
 static int Z_AVG[2] = {Sensitivity_def,Sensitivity_def} ;
@@ -381,7 +387,7 @@ yas_measure(struct yas_data *raw, int num)
 	uint8_t buf[6];
 	int16_t dat[3];
 	int i, j;
-#ifdef KIONIX_AUTO_CAL	
+#ifdef KIONIX_AUTO_CAL
 	int k=0;
 #endif
 
@@ -400,18 +406,18 @@ yas_measure(struct yas_data *raw, int num)
 		dat[i] = (int16_t)(((int16_t)((buf[i*2+1] << 8))
 				    | buf[i*2]) >> 4);
 #ifdef KIONIX_AUTO_CAL
-		if(			(abs(dat[0]) < Detection_range)  
-				&&	(abs(dat[1]) < Detection_range)	
-				&&	(abs((abs(dat[2])- Sensitivity_def))  < ((Detection_range)+ 154)))		// 154 = 1024*15% 
+		if(			(abs(dat[0]) < Detection_range)
+				&&	(abs(dat[1]) < Detection_range)
+				&&	(abs((abs(dat[2])- Sensitivity_def))  < ((Detection_range)+ 154)))		// 154 = 1024*15%
 		  {
-			
+
 			temp_zsum = 0;
 			Wave_Max =-4095;
 			Wave_Min = 4095;
-			
-			BUF_RANGE = 1000 / module.delay; 
-			if ( BUF_RANGE > BUF_RANGE_Limit ) BUF_RANGE = BUF_RANGE_Limit; 
-			
+
+			BUF_RANGE = 1000 / module.delay;
+			if ( BUF_RANGE > BUF_RANGE_Limit ) BUF_RANGE = BUF_RANGE_Limit;
+
 			for (k=0; k < BUF_RANGE-1; k++) {
 				temp_zbuf[k] = temp_zbuf[k+1];
 				if (temp_zbuf[k] == 0) temp_zbuf[k] = Sensitivity_def ;
@@ -423,23 +429,22 @@ yas_measure(struct yas_data *raw, int num)
 			temp_zbuf[k] = dat[2]; // k=BUF_RANGE-1, update Z raw to bubber
 			temp_zsum += temp_zbuf[k];
 			if (temp_zbuf[k] > Wave_Max) Wave_Max = temp_zbuf[k];
-			if (temp_zbuf[k] < Wave_Min) Wave_Min = temp_zbuf[k];	   
+			if (temp_zbuf[k] < Wave_Min) Wave_Min = temp_zbuf[k];
 			if (Wave_Max-Wave_Min < Stable_range ){
-				
+
 			if ( temp_zsum > 0)
 					Z_AVG[0] = temp_zsum / BUF_RANGE;
-				else 
-					Z_AVG[1] = temp_zsum / BUF_RANGE;	
+				else
+					Z_AVG[1] = temp_zsum / BUF_RANGE;
 			}
 		}
 
-		if ( dat[2] >=0) 
+		if ( dat[2] >=0)
 					dat[2] = dat[2] * 1024 / abs(Z_AVG[0]); // Gain Compensation
 		else
 					dat[2] = dat[2] * 1024 / abs(Z_AVG[1]); // Gain Compensation
-				
-#endif
 
+#endif
 	for (i = 0; i < 3; i++) {
 		raw->xyz.v[i] = 0;
 		for (j = 0; j < 3; j++)
@@ -558,10 +563,10 @@ static int yas_device_read(int32_t type, uint8_t addr, uint8_t *buf, int len)
 	msg[1].buf = buf;
 	err = i2c_transfer(this_client->adapter, msg, 2);
 	if (err != 2) {
-		dev_err(&this_client->dev,
-				"i2c_transfer() read error: "
-				"slave_addr=%02x, reg_addr=%02x, err=%d\n",
-				this_client->addr, addr, err);
+		E(
+		  "i2c_transfer() read error: "
+		  "slave_addr=%02x, reg_addr=%02x, err=%d\n",
+		  this_client->addr, addr, err);
 		return err;
 	}
 	return 0;
@@ -605,6 +610,7 @@ static int yas_set_pseudo_irq(struct iio_dev *indio_dev, int enable)
 static void iio_trigger_work(struct irq_work *work)
 {
 	struct yas_state *st = g_st;
+
 	iio_trigger_poll(st->trig, iio_get_time_ns());
 }
 
@@ -618,8 +624,7 @@ static irqreturn_t yas_trigger_handler(int irq, void *p)
 
 	acc = (int32_t *)kmalloc(indio_dev->scan_bytes, GFP_KERNEL);
 	if (acc == NULL) {
-		dev_err(indio_dev->dev.parent,
-				"memory alloc failed in buffer bh");
+		E("%s: memory alloc failed in buffer bh\n", __func__);
 		goto done;
 	}
 	if (!bitmap_empty(indio_dev->active_scan_mask, indio_dev->masklength)) {
@@ -633,7 +638,7 @@ static irqreturn_t yas_trigger_handler(int irq, void *p)
 		len = j * 4;
 	}
 
-	/* Guaranteed to be aligned with 8 byte boundary */
+
 	if (indio_dev->scan_timestamp)
 		*(s64 *)((u8 *)acc + ALIGN(len, sizeof(s64))) = pf->timestamp;
 
@@ -648,6 +653,7 @@ static int yas_data_rdy_trigger_set_state(struct iio_trigger *trig,
 		bool state)
 {
 	struct iio_dev *indio_dev = iio_trigger_get_drvdata(trig);
+
 	yas_set_pseudo_irq(indio_dev, state);
 	return 0;
 }
@@ -678,7 +684,6 @@ static int yas_probe_trigger(struct iio_dev *indio_dev)
 	st->trig->dev.parent = &st->client->dev;
 	st->trig->ops = &yas_trigger_ops;
 	iio_trigger_set_drvdata(st->trig, indio_dev);
-
 	ret = iio_trigger_register(st->trig);
 	if (ret)
 		goto error_free_trig;
@@ -744,7 +749,7 @@ error_ret:
 static ssize_t yas_position_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
 	int ret;
 	mutex_lock(&st->lock);
@@ -758,7 +763,7 @@ static ssize_t yas_position_show(struct device *dev,
 static ssize_t yas_position_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
 	int ret, position;
 	sscanf(buf, "%d\n", &position);
@@ -773,7 +778,7 @@ static ssize_t yas_position_store(struct device *dev,
 static ssize_t yas_sampling_frequency_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
 	return sprintf(buf, "%d\n", st->sampling_frequency);
 }
@@ -782,7 +787,7 @@ static ssize_t yas_sampling_frequency_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t count)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
 	int ret, data;
 	ret = kstrtoint(buf, 10, &data);
@@ -797,7 +802,7 @@ static ssize_t yas_sampling_frequency_store(struct device *dev,
 static ssize_t yas_enable_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
 
 	return sprintf(buf, "%d\n", st->acc.get_enable());
@@ -807,15 +812,17 @@ static ssize_t yas_enable_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t count)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
 	int ret, en;
 
 	ret = kstrtoint(buf, 10, &en);
 	if (ret) {
-		printk(KERN_ERR"%s: kstrtou8 fails, ret = %d\n", __func__, ret);
+		E("%s: kstrtou8 fails, ret = %d\n", __func__, ret);
 		return ret;
 	}
+
+	I("%s: en = %d\n", __func__, en);
 
 	st->acc.set_enable(en);
 
@@ -844,10 +851,11 @@ static int yas_write_raw(struct iio_dev *indio_dev,
 }
 
 static int yas_read_raw(struct iio_dev *indio_dev,
-		struct iio_chan_spec const *chan,
-		int *val,
-		int *val2,
-		long mask) {
+			struct iio_chan_spec const *chan,
+			int *val,
+			int *val2,
+			long mask)
+{
 	struct yas_state  *st = iio_priv(indio_dev);
 	int ret = -EINVAL;
 	struct yas_data acc[1];
@@ -865,13 +873,15 @@ static int yas_read_raw(struct iio_dev *indio_dev,
 			for (i = 0; i < 3; i++)
 				st->compass_data[i] = acc[0].xyz.v[i];
 		}
+
 		*val = st->compass_data[chan->channel2 - IIO_MOD_X];
 		ret = IIO_VAL_INT;
+
 		break;
 	case IIO_CHAN_INFO_SCALE:
 	case IIO_CHAN_INFO_CALIBSCALE:
-		/* Gain : counts / m/s^2 = 1000000 [um/s^2] */
-		/* Scaling factor : 1000000 / Gain = 1 */
+
+
 		*val = 0;
 		*val2 = 1;
 		ret = IIO_VAL_INT_PLUS_MICRO;
@@ -906,6 +916,10 @@ static void yas_work_func(struct work_struct *work)
 				= acc[0].xyz.v[i] - st->calib_bias[i];
 	}
 	mutex_unlock(&st->lock);
+
+	IIF("%s: acc(x, y, z) = (%d, %d, %d)\n", __func__, st->compass_data[0]
+		, st->compass_data[1], st->compass_data[2]);
+
 	if (ret == 1)
 		irq_work_queue(&st->iio_irq_work);
 	time_after = jiffies_to_msecs(jiffies);
@@ -916,16 +930,22 @@ static void yas_work_func(struct work_struct *work)
 	schedule_delayed_work(&st->work, msecs_to_jiffies(delay));
 }
 
-#define YAS_ACCELEROMETER_CHANNEL(axis)				\
-{								\
-	.type = IIO_ACCEL,					\
-	.modified = 1,						\
-	.channel2 = IIO_MOD_##axis,				\
-	.info_mask_separate = BIT(IIO_CHAN_INFO_CALIBSCALE) |	\
-				BIT(IIO_CHAN_INFO_CALIBBIAS),	\
-	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),	\
-	.scan_index = YAS_SCAN_ACCEL_##axis,			\
-	.scan_type = IIO_ST('s', 32, 32, 0)			\
+#define YAS_ACCEL_INFO_SHARED_MASK		\
+	(BIT(IIO_CHAN_INFO_SCALE))
+#define YAS_ACCEL_INFO_SEPARATE_MASK		\
+	(BIT(IIO_CHAN_INFO_RAW) |		\
+	 BIT(IIO_CHAN_INFO_CALIBBIAS) |		\
+	 BIT(IIO_CHAN_INFO_CALIBSCALE))
+
+#define YAS_ACCELEROMETER_CHANNEL(axis)		\
+{						\
+	.type = IIO_ACCEL,			\
+	.modified = 1,				\
+	.channel2 = IIO_MOD_##axis,		\
+	.info_mask_separate = YAS_ACCEL_INFO_SEPARATE_MASK,	\
+	.info_mask_shared_by_type = YAS_ACCEL_INFO_SHARED_MASK,	\
+	.scan_index = YAS_SCAN_ACCEL_##axis,	\
+	.scan_type = IIO_ST('s', 32, 32, 0)	\
 }
 
 static const struct iio_chan_spec yas_channels[] = {
@@ -997,7 +1017,7 @@ static int create_sysfs_interfaces(struct yas_state *st)
 				&st->indio_dev->dev.kobj,
 				"iio");
 	if (res < 0) {
-		printk(KERN_ERR"link create error, res = %d\n", res);
+		E("link create error, res = %d\n", res);
 		goto err_fail_sysfs_create_link;
 	}
 
@@ -1022,9 +1042,9 @@ static int yas_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 	int ret, i;
 	struct yas_acc_platform_data *pdata;
 
-	this_client = i2c;
-	printk("%s: yas_kionix_accel_probe start ---\n", __FUNCTION__);
+	I("%s\n", __func__);
 
+	this_client = i2c;
 	indio_dev = iio_device_alloc(sizeof(*st));
 	if (!indio_dev) {
 		ret = -ENOMEM;
@@ -1057,6 +1077,7 @@ static int yas_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 	st->sus.resume = yas_late_resume;
 	register_early_suspend(&st->sus);
 #endif
+
 	for (i = 0; i < 3; i++) {
 		st->compass_data[i] = 0;
 		st->calib_bias[i] = 0;
@@ -1092,7 +1113,7 @@ static int yas_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 
 	ret = create_sysfs_interfaces(st);
 	if (ret) {
-		printk(KERN_ERR"%s: create_sysfs_interfaces fail, ret = %d\n",
+		E("%s: create_sysfs_interfaces fail, ret = %d\n",
 		  __func__, ret);
 		goto err_create_fixed_sysfs;
 	}
@@ -1143,21 +1164,33 @@ static int yas_remove(struct i2c_client *i2c)
 #ifdef CONFIG_PM
 static int yas_suspend(struct device *dev)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
+
+	I("%s++\n", __func__);
+
 	if (atomic_read(&st->pseudo_irq_enable))
 		cancel_delayed_work_sync(&st->work);
 	st->acc.set_enable(0);
+
+	I("%s--\n", __func__);
+
 	return 0;
 }
 
 static int yas_resume(struct device *dev)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
+
+	I("%s++\n", __func__);
+
 	st->acc.set_enable(1);
 	if (atomic_read(&st->pseudo_irq_enable))
 		schedule_delayed_work(&st->work, 0);
+
+	I("%s--\n", __func__);
+
 	return 0;
 }
 
@@ -1176,7 +1209,7 @@ MODULE_DEVICE_TABLE(i2c, yas_id);
 static struct of_device_id kxtj2_match_table[] = {
 		{ .compatible  = "qcom,kxtj2",},
 		{ .compatible  = "kxtj2",},
-		{ },
+	{},
 };
 
 static struct i2c_driver yas_driver = {

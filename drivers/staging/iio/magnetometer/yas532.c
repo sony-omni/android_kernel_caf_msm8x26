@@ -37,13 +37,20 @@
 #include <linux/iio/buffer.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
-#include <linux/iio/kfifo_buf.h>
 #include <linux/iio/trigger.h>
 #include <linux/iio/trigger_consumer.h>
+#include <linux/iio/kfifo_buf.h>
 #include <linux/irq_work.h>
+
 #include "yas.h"
+
 #include <linux/of_gpio.h>
 #include <linux/regulator/consumer.h>
+
+#define D(x...) printk(KERN_DEBUG "[COMP][YAS53X] " x)
+#define I(x...) printk(KERN_INFO "[COMP][YAS53X] " x)
+#define W(x...) printk(KERN_WARNING "[COMP][YAS53X] " x)
+#define E(x...) printk(KERN_ERR "[COMP][YAS53X] " x)
 
 #if YAS_MAG_DRIVER == YAS_MAG_DRIVER_YAS532 \
 	|| YAS_MAG_DRIVER == YAS_MAG_DRIVER_YAS533
@@ -67,7 +74,7 @@
 #define YAS532_DATA_CENTER		(4096)
 #define YAS532_DATA_UNDERFLOW		(0)
 #define YAS532_DATA_OVERFLOW		(8190)
-#define YAS532_DEVICE_ID		(0x02)	/* YAS532 (MS-3R/3F) */
+#define YAS532_DEVICE_ID		(0x02)
 #define YAS532_TEMP20DEGREE_TYPICAL	(390)
 
 #define YAS_X_OVERFLOW			(0x01)
@@ -82,15 +89,15 @@
 #define YAS532_MAG_STATE_NORMAL		(0)
 #define YAS532_MAG_STATE_INIT_COIL	(1)
 #define YAS532_MAG_STATE_MEASURE_OFFSET	(2)
-#define YAS532_MAG_INITCOIL_TIMEOUT	(1000)	/* msec */
+#define YAS532_MAG_INITCOIL_TIMEOUT	(1000)
 #define YAS532_MAG_TEMPERATURE_LOG	(10)
 #define YAS532_MAG_NOTRANS_POSITION	(3)
 #if YAS532_DRIVER_NO_SLEEP
 #define YAS_MAG_MAX_BUSY_LOOP		(1000)
 #endif
-#define GEOMAGNETIC_RSTN_GPIO 64 
 #define CHECK_RANGE(X, MIN, MAX)    (X>=MIN && X<=MAX)?1:0
 #define CHECK_GREATER(X, MIN)    (X>=MIN)?1:0
+#define GEOMAGNETIC_RSTN_GPIO 64
 
 #define set_vector(to, from) \
 	{int _l; for (_l = 0; _l < 3; _l++) (to)[_l] = (from)[_l]; }
@@ -449,7 +456,7 @@ static int yas_measure(struct yas_data *data, int num, int temp_correction,
 			driver.measure_state = YAS532_MAG_STATE_NORMAL;
 			break;
 		}
-		/* FALLTHRU */
+
 	case YAS532_MAG_STATE_MEASURE_OFFSET:
 		rt = yas_cdrv_measure_and_set_offset();
 		if (rt < 0)
@@ -498,9 +505,9 @@ static int yas_measure(struct yas_data *data, int num, int temp_correction,
 	for (i = 0; i < 3; i++) {
 		data->xyz.v[i] -= data->xyz.v[i] % 10;
 		if (*ouflow & (1<<(i*2)))
-			data->xyz.v[i] += 1; /* set overflow */
+			data->xyz.v[i] += 1;
 		if (*ouflow & (1<<(i*2+1)))
-			data->xyz.v[i] += 2; /* set underflow */
+			data->xyz.v[i] += 2;
 	}
 	tm = curtime();
 	data->type = YAS_TYPE_MAG;
@@ -891,10 +898,10 @@ static int yas_device_read(int32_t type, uint8_t addr, uint8_t *buf, int len)
 	msg[1].buf = buf;
 	err = i2c_transfer(this_client->adapter, msg, 2);
 	if (err != 2) {
-		dev_err(&this_client->dev,
-				"i2c_transfer() read error: "
-				"slave_addr=%02x, reg_addr=%02x, err=%d\n",
-				this_client->addr, addr, err);
+		E(
+		  "i2c_transfer() read error: "
+		  "slave_addr=%02x, reg_addr=%02x, err=%d\n",
+		  this_client->addr, addr, err);
 		return err;
 	}
 	return 0;
@@ -952,8 +959,7 @@ static irqreturn_t yas_trigger_handler(int irq, void *p)
 
 	mag = (int32_t *)kmalloc(indio_dev->scan_bytes, GFP_KERNEL);
 	if (mag == NULL) {
-		dev_err(indio_dev->dev.parent,
-				"memory alloc failed in buffer bh");
+		E("%s: memory alloc failed in buffer bh\n", __func__);
 		goto done;
 	}
 	if (!bitmap_empty(indio_dev->active_scan_mask, indio_dev->masklength)) {
@@ -982,6 +988,7 @@ static int yas_data_rdy_trigger_set_state(struct iio_trigger *trig,
 		bool state)
 {
 	struct iio_dev *indio_dev = iio_trigger_get_drvdata(trig);
+
 	yas_set_pseudo_irq(indio_dev, state);
 	return 0;
 }
@@ -1012,7 +1019,6 @@ static int yas_probe_trigger(struct iio_dev *indio_dev)
 	st->trig->dev.parent = &st->client->dev;
 	st->trig->ops = &yas_trigger_ops;
 	iio_trigger_set_drvdata(st->trig, indio_dev);
-
 	ret = iio_trigger_register(st->trig);
 	if (ret)
 		goto error_free_trig;
@@ -1078,7 +1084,7 @@ error_ret:
 static ssize_t yas_position_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
 	int ret;
 	mutex_lock(&st->lock);
@@ -1092,7 +1098,7 @@ static ssize_t yas_position_show(struct device *dev,
 static ssize_t yas_position_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
 	int ret, position;
 	sscanf(buf, "%d\n", &position);
@@ -1107,10 +1113,10 @@ static ssize_t yas_position_store(struct device *dev,
 static ssize_t yas_i2c_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
 
-	printk(KERN_DEBUG "%s: st->i2c_rdata = 0x%x\n", __func__, st->i2c_rdata);
+	D("%s: st->i2c_rdata = 0x%x\n", __func__, st->i2c_rdata);
 
 	return scnprintf(buf, PAGE_SIZE, "%x\n", st->i2c_rdata);
 }
@@ -1118,32 +1124,32 @@ static ssize_t yas_i2c_show(struct device *dev,
 static ssize_t yas_i2c_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
 	int ret;
 	u32 is_write, addr, data;
 
 	ret = sscanf(buf, "%1d %02x %02x", &is_write, &addr, &data);
 	if (ret < 3) {
-		printk(KERN_ERR "%s: sscanf fail, ret = %d\n", __func__, ret);
+		E("%s: sscanf fail, ret = %d\n", __func__, ret);
 		return -EINVAL;
 	}
 
-	printk(KERN_DEBUG"%s: is_write = %u, addr = 0x%x, data = 0x%x\n",
+	D("%s: is_write = %u, addr = 0x%x, data = 0x%x\n",
 	  __func__, is_write, addr, data);
 
 	mutex_lock(&st->lock);
 	if (!!is_write) {
 		ret = yas_single_write(addr, data);
 		if (ret < 0) {
-			printk(KERN_ERR "%s: yas_single_write fail, ret = %d\n",
+			E("%s: yas_single_write fail, ret = %d\n",
 			  __func__, ret);
 			return -EIO;
 		}
 	} else {
 		ret = yas_read(addr, &st->i2c_rdata, 1);
 		if (ret < 0) {
-			printk(KERN_ERR "%s: yas_read fail, ret = %d\n", __func__, ret);
+			E("%s: yas_read fail, ret = %d\n", __func__, ret);
 			return -EIO;
 		}
 	}
@@ -1156,10 +1162,10 @@ static ssize_t yas_i2c_store(struct device *dev,
 static ssize_t yas_int_pin_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
 
-	printk(KERN_DEBUG "%s: gpio_get_value(st->intr) = %d\n", __func__, gpio_get_value(st->intr));
+	D("%s: gpio_get_value(st->intr) = %d\n", __func__, gpio_get_value(st->intr));
 
 	return scnprintf(buf, PAGE_SIZE, "%d\n", gpio_get_value(st->intr));
 }
@@ -1173,10 +1179,11 @@ static ssize_t yas_int_pin_store(struct device *dev,
 
 #if YAS_MAG_DRIVER == YAS_MAG_DRIVER_YAS532 \
 	|| YAS_MAG_DRIVER == YAS_MAG_DRIVER_YAS533
+
 static ssize_t yas_hard_offset_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
 	int8_t hard_offset[3];
 	int ret;
@@ -1192,7 +1199,7 @@ static ssize_t yas_hard_offset_show(struct device *dev,
 static ssize_t yas_hard_offset_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
 	int32_t tmp[3];
 	int8_t hard_offset[3];
@@ -1212,7 +1219,7 @@ static ssize_t yas_hard_offset_store(struct device *dev,
 static ssize_t yas_sampling_frequency_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
 	return sprintf(buf, "%d\n", st->sampling_frequency);
 }
@@ -1221,7 +1228,7 @@ static ssize_t yas_sampling_frequency_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t count)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
 	int ret, data;
 	ret = kstrtoint(buf, 10, &data);
@@ -1237,33 +1244,32 @@ static ssize_t yas_sampling_frequency_store(struct device *dev,
 	|| YAS_MAG_DRIVER == YAS_MAG_DRIVER_YAS533
 
 int checkresult(int ret, int id, int x, int y1, int y2, int dir, int sx,
-			int sy, int ohx, int ohy, int ohz)
+                        int sy, int ohx, int ohy, int ohz)
 {
-	
-	if(ret)
-	    return 0;
-	if(id != 0x02)
-	    return 0;
-	if(!CHECK_RANGE(x, -30, 30))
-	    return 0;
-	if(!CHECK_RANGE(y1, -30, 30))
-	    return 0;
-	if(!CHECK_RANGE(y2, -30, 30))
-	    return 0;
-	if(!CHECK_RANGE(dir, 0, 359))
-	    return 0;
-	if(!CHECK_GREATER(sx,17))
-	    return 0;
-	if(!CHECK_GREATER(sy,22))
-	    return 0;
-	    
-	return 1;
+        if(ret)
+            return 0;
+        if(id != 0x02)
+            return 0;
+        if(!CHECK_RANGE(x, -30, 30))
+            return 0;
+        if(!CHECK_RANGE(y1, -30, 30))
+            return 0;
+        if(!CHECK_RANGE(y2, -30, 30))
+            return 0;
+        if(!CHECK_RANGE(dir, 0, 359))
+            return 0;
+        if(!CHECK_GREATER(sx,17))
+            return 0;
+        if(!CHECK_GREATER(sy,22))
+            return 0;
+
+        return 1;
 }
 
 static ssize_t yas_self_test_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
 	struct yas532_self_test_result r;
 	int ret;
@@ -1283,7 +1289,7 @@ static ssize_t yas_self_test_show(struct device *dev,
 static ssize_t yas_self_test_noise_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
 	int32_t xyz_raw[3];
 	int ret;
@@ -1315,8 +1321,8 @@ static int yas_read_raw(struct iio_dev *indio_dev,
 		ret = IIO_VAL_INT;
 		break;
 	case IIO_CHAN_INFO_SCALE:
-		/* Gain : counts / uT = 1000 [nT] */
-		/* Scaling factor : 1000000 / Gain = 1000 */
+
+
 		*val = 0;
 		*val2 = 1000;
 		ret = IIO_VAL_INT_PLUS_MICRO;
@@ -1356,15 +1362,18 @@ static void yas_work_func(struct work_struct *work)
 	schedule_delayed_work(&st->work, msecs_to_jiffies(delay));
 }
 
-#define YAS_MAGNETOMETER_CHANNEL(axis)				\
-{								\
-	.type = IIO_MAGN,					\
-	.modified = 1,						\
-	.channel2 = IIO_MOD_##axis,				\
-	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),	\
-	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),	\
-	.scan_index = YAS_SCAN_MAGN_##axis,			\
-	.scan_type = IIO_ST('s', 32, 32, 0)			\
+#define YAS_MAGN_INFO_SHARED_MASK	(BIT(IIO_CHAN_INFO_SCALE))
+#define YAS_MAGN_INFO_SEPARATE_MASK	(BIT(IIO_CHAN_INFO_RAW))
+
+#define YAS_MAGNETOMETER_CHANNEL(axis)		\
+{						\
+	.type = IIO_MAGN,			\
+	.modified = 1,				\
+	.channel2 = IIO_MOD_##axis,		\
+	.info_mask_separate = YAS_MAGN_INFO_SEPARATE_MASK,	\
+	.info_mask_shared_by_type = YAS_MAGN_INFO_SHARED_MASK,	\
+	.scan_index = YAS_SCAN_MAGN_##axis,	\
+	.scan_type = IIO_ST('s', 32, 32, 0)	\
 }
 
 static const struct iio_chan_spec yas_channels[] = {
@@ -1520,7 +1529,7 @@ static int create_sysfs_interfaces(struct yas_state *st)
 				&st->indio_dev->dev.kobj,
 				"iio");
 	if (res < 0) {
-		printk(KERN_ERR "link create error, res = %d\n", res);
+		E("link create error, res = %d\n", res);
 		goto err_fail_sysfs_create_link;
 	}
 
@@ -1545,10 +1554,11 @@ static int yas_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 	struct yas_platform_data *pdata;
 	int ret;
 
+	I("%s\n", __func__);
+
 	this_client = i2c;
 	mag_sensor_power_on(i2c);
-	printk("%s: yas533_probe start ---\n", __FUNCTION__);
-	
+
 	indio_dev = iio_device_alloc(sizeof(*st));
 	if (!indio_dev) {
 		ret = -ENOMEM;
@@ -1562,6 +1572,7 @@ static int yas_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 	indio_dev->channels = yas_channels;
 	indio_dev->num_channels = ARRAY_SIZE(yas_channels);
 	indio_dev->modes = INDIO_DIRECT_MODE;
+	I("%s: id->name = %s\n", __func__, id->name);
 
 	st = iio_priv(indio_dev);
 	st->client = i2c;
@@ -1612,7 +1623,7 @@ static int yas_probe(struct i2c_client *i2c, const struct i2c_device_id *id)
 
 	ret = create_sysfs_interfaces(st);
 	if (ret) {
-		printk(KERN_ERR "%s: create_sysfs_interfaces fail, ret = %d\n",
+		E("%s: create_sysfs_interfaces fail, ret = %d\n",
 		  __func__, ret);
 		goto err_create_fixed_sysfs;
 	}
@@ -1663,21 +1674,33 @@ static int yas_remove(struct i2c_client *i2c)
 #ifdef CONFIG_PM_SLEEP
 static int yas_suspend(struct device *dev)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
+
+	I("%s++\n", __func__);
+
 	if (atomic_read(&st->pseudo_irq_enable))
 		cancel_delayed_work_sync(&st->work);
 	st->mag.set_enable(0);
+
+	I("%s--\n", __func__);
+
 	return 0;
 }
 
 static int yas_resume(struct device *dev)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct yas_state *st = iio_priv(indio_dev);
+
+	I("%s++\n", __func__);
+
 	st->mag.set_enable(1);
 	if (atomic_read(&st->pseudo_irq_enable))
 		schedule_delayed_work(&st->work, 0);
+
+	I("%s--\n", __func__);
+
 	return 0;
 }
 
@@ -1696,7 +1719,7 @@ MODULE_DEVICE_TABLE(i2c, yas_id);
 static struct of_device_id yas533_match_table[] = {
 		{ .compatible  = "qcom,yas532",},
 		{ .compatible  = "yas532",},
-		{ },
+	{},
 };
 
 static struct i2c_driver yas_driver = {
