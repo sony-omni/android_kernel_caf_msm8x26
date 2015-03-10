@@ -941,7 +941,7 @@ static int yas_data_rdy_trig_poll(struct iio_dev *indio_dev)
 {
 	struct yas_state *st = iio_priv(indio_dev);
 	iio_trigger_poll(st->trig, iio_get_time_ns());
-	return IRQ_HANDLED;
+	return 0;
 }
 
 static irqreturn_t yas_trigger_handler(int irq, void *p)
