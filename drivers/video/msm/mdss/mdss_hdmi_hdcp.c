@@ -203,6 +203,62 @@ static void hdmi_hdcp_hw_ddc_clean(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 	}
 } /* hdmi_hdcp_hw_ddc_clean */
 
+static int hdcp_scm_call(struct scm_hdcp_req *req, u32 *resp)
+{
+	int ret = 0;
+
+	if (!is_scm_armv8()) {
+		ret = scm_call(SCM_SVC_HDCP, SCM_CMD_HDCP, (void *) req,
+			     SCM_HDCP_MAX_REG * sizeof(struct scm_hdcp_req),
+			     &resp, sizeof(*resp));
+	} else {
+		struct scm_desc desc;
+
+		desc.args[0] = req[0].addr;
+		desc.args[1] = req[0].val;
+		desc.args[2] = req[1].addr;
+		desc.args[3] = req[1].val;
+		desc.args[4] = req[2].addr;
+		desc.args[5] = req[2].val;
+		desc.args[6] = req[3].addr;
+		desc.args[7] = req[3].val;
+		desc.args[8] = req[4].addr;
+		desc.args[9] = req[4].val;
+		desc.arginfo = SCM_ARGS(10);
+
+		ret = scm_call2(SCM_SIP_FNID(SCM_SVC_HDCP, SCM_CMD_HDCP),
+				&desc);
+		*resp = desc.ret[0];
+		if (ret)
+			return ret;
+	}
+
+	return ret;
+}
+
+void hdmi_hdcp_aksv(u8 aksv[5], void *input)
+{
+	struct hdmi_hdcp_ctrl *hdcp_ctrl = (struct hdmi_hdcp_ctrl *)input;
+	u32 qfprom_aksv_lsb, qfprom_aksv_msb;
+
+	if (!hdcp_ctrl) {
+		DEV_ERR("%s: invalid input\n", __func__);
+		return;
+	}
+
+	/* Fetch aksv from QFPROM, this info should be public. */
+	qfprom_aksv_lsb = DSS_REG_R(hdcp_ctrl->init_data.qfprom_io,
+		HDCP_KSV_LSB);
+	qfprom_aksv_msb = DSS_REG_R(hdcp_ctrl->init_data.qfprom_io,
+		HDCP_KSV_MSB);
+
+	aksv[0] =  qfprom_aksv_lsb        & 0xFF;
+	aksv[1] = (qfprom_aksv_lsb >> 8)  & 0xFF;
+	aksv[2] = (qfprom_aksv_lsb >> 16) & 0xFF;
+	aksv[3] = (qfprom_aksv_lsb >> 24) & 0xFF;
+	aksv[4] =  qfprom_aksv_msb        & 0xFF;
+} /* hdmi_hdcp_aksv */
+
 static int hdmi_hdcp_authentication_part1(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 {
 	int rc;
@@ -1377,8 +1433,8 @@ int hdmi_hdcp_isr(void *input)
 
 	/* Ignore HDCP interrupts if HDCP is disabled */
 	if (HDCP_STATE_INACTIVE == hdcp_ctrl->hdcp_state) {
-		DEV_DBG("%s: HDCP inactive. Just clear int and return.\n",
-			__func__);
+		if (hdcp_int_val)
+			DEV_ERR("%s: HDCP inactive.\n", __func__);
 		DSS_REG_W(io, HDMI_HDCP_INT_CTRL, HDCP_INT_CLR);
 		return 0;
 	}
