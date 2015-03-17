@@ -54,7 +54,7 @@
 #include "mdss_debug.h"
 #include "mdss_mdp_debug.h"
 
-#define CREATE_TRACE_POINTS
+//#define CREATE_TRACE_POINTS
 #include "mdss_mdp_trace.h"
 
 #define AXI_HALT_TIMEOUT_US	0x4000
