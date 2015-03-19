@@ -662,6 +662,23 @@ static inline bool mdss_mdp_ctl_is_power_on(struct mdss_mdp_ctl *ctl)
 	return mdss_panel_is_power_on(ctl->power_state);
 }
 
+static inline u32 left_lm_w_from_mfd(struct msm_fb_data_type *mfd)
+{
+        struct mdss_mdp_ctl *ctl = mfd_to_ctl(mfd);
+        struct mdss_panel_info *pinfo = mfd->panel_info;
+        int width = 0;
+
+        if (ctl && ctl->mixer_left) {
+                width =  ctl->mixer_left->width;
+                width -= (pinfo->lcdc.border_left + pinfo->lcdc.border_right);
+                pr_debug("ctl=%d mw=%d l=%d r=%d w=%d\n",
+                        ctl->num, ctl->mixer_left->width,
+                        pinfo->lcdc.border_left, pinfo->lcdc.border_right,
+                        width);
+        }
+        return width;
+}
+
 static inline bool mdss_mdp_ctl_is_power_on_lp(struct mdss_mdp_ctl *ctl)
 {
 	return mdss_panel_is_power_on_lp(ctl->power_state);

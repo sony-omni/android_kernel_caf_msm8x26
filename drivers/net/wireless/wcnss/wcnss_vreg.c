@@ -446,8 +446,6 @@ static int wcnss_vregs_on(struct device *dev,
 		}
 		regulators[i].state |= VREG_ENABLE_MASK;
 	}
-	wcnss_power_state = (on == WCNSS_WLAN_SWITCH_ON ? true : false);
-
 	return rc;
 
 fail:

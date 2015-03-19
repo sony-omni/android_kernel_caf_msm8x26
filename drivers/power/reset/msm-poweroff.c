@@ -11,6 +11,7 @@
  *
  */
 
+#include <linux/cpu.h>
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/init.h>
@@ -267,6 +268,19 @@ static void do_msm_poweroff(void)
 	return;
 }
 
+static int msm_reboot_call(struct notifier_block *this,
+                           unsigned long code, void *_cmd)
+{
+        if (code == SYS_DOWN)
+                disable_nonboot_cpus();
+
+        return NOTIFY_DONE;
+}
+
+static struct notifier_block msm_reboot_notifier = {
+        .notifier_call = msm_reboot_call,
+};
+
 static int msm_restart_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -335,19 +349,6 @@ err_restart_reason:
 #endif
 	return ret;
 }
-
-static int msm_reboot_call(struct notifier_block *this,
-			   unsigned long code, void *_cmd)
-{
-	if (code == SYS_DOWN)
-		disable_nonboot_cpus();
-
-	return NOTIFY_DONE;
-}
-
-static struct notifier_block msm_reboot_notifier = {
-	.notifier_call = msm_reboot_call,
-};
 
 static const struct of_device_id of_msm_restart_match[] = {
 	{ .compatible = "qcom,pshold", },
