@@ -127,6 +127,7 @@ struct mdss_data_type {
 	struct regulator *vdd_cx;
 	bool batfet_required;
 	struct regulator *batfet;
+	bool en_svs_high;
 	u32 max_mdp_clk_rate;
 	struct mdss_util_intf *mdss_util;
 
@@ -306,6 +307,8 @@ struct mdss_util_intf {
 	int (*get_iommu_domain)(u32 type);
 	int (*iommu_attached)(void);
 	int (*iommu_ctrl)(int enable);
+	void (*iommu_lock)(void);
+	void (*iommu_unlock)(void);
 	void (*bus_bandwidth_ctrl)(int enable);
 	int (*bus_scale_set_quota)(int client, u64 ab_quota, u64 ib_quota);
 	struct mdss_panel_cfg* (*panel_intf_type)(int intf_val);

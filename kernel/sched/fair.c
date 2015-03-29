@@ -1472,14 +1472,29 @@ u64 scale_load_to_cpu(u64 task_load, int cpu)
 	return task_load;
 }
 
+#ifdef CONFIG_CGROUP_SCHED
+
+static inline int upmigrate_discouraged(struct task_struct *p)
+{
+	return task_group(p)->upmigrate_discouraged;
+}
+
+#else
+
+static inline int upmigrate_discouraged(struct task_struct *p)
+{
+	return 0;
+}
+
+#endif
+
 /* Is a task "big" on its current cpu */
 static inline int is_big_task(struct task_struct *p)
 {
 	u64 load = task_load(p);
 	int nice = TASK_NICE(p);
 
-	/* Todo: Provide cgroup-based control as well? */
-	if (nice > sysctl_sched_upmigrate_min_nice)
+	if (nice > sysctl_sched_upmigrate_min_nice || upmigrate_discouraged(p))
 		return 0;
 
 	load = scale_load_to_cpu(load, task_cpu(p));
@@ -1666,8 +1681,8 @@ static int task_will_fit(struct task_struct *p, int cpu)
 		if (rq->capacity > prev_rq->capacity)
 			return 1;
 	} else {
-		/* Todo: Provide cgroup-based control as well? */
-		if (nice > sysctl_sched_upmigrate_min_nice)
+		if (nice > sysctl_sched_upmigrate_min_nice ||
+		    upmigrate_discouraged(p))
 			return 1;
 
 		load = scale_load_to_cpu(task_load(p), cpu);
@@ -2413,9 +2428,8 @@ static inline int migration_needed(struct rq *rq, struct task_struct *p)
 	if (is_small_task(p))
 		return 0;
 
-	/* Todo: cgroup-based control? */
-	if (nice > sysctl_sched_upmigrate_min_nice &&
-		rq->capacity > min_capacity)
+	if ((nice > sysctl_sched_upmigrate_min_nice ||
+	     upmigrate_discouraged(p)) && rq->capacity > min_capacity)
 			return MOVE_TO_LITTLE_CPU;
 
 	if (!task_will_fit(p, cpu_of(rq)))
@@ -2513,6 +2527,29 @@ unsigned int cpu_temp(int cpu)
 		return 0;
 }
 
+/*
+ * Return total number of tasks "eligible" to run on highest capacity cpu
+ *
+ * This is simply nr_big_tasks for cpus which are not of max_capacity and
+ * (nr_running - nr_small_tasks) for cpus of max_capacity
+ */
+unsigned int nr_eligible_big_tasks(int cpu)
+{
+	struct rq *rq = cpu_rq(cpu);
+	int nr_big = rq->nr_big_tasks;
+	int nr = rq->nr_running;
+	int nr_small = rq->nr_small_tasks;
+
+	if (rq->capacity != max_capacity)
+		return nr_big;
+
+	/* Consider all (except small) tasks on max_capacity cpu as big tasks */
+	nr_big = nr - nr_small;
+	if (nr_big < 0)
+		nr_big = 0;
+
+	return nr_big;
+}
 
 #else	/* CONFIG_SCHED_HMP */
 
@@ -3806,8 +3843,10 @@ static void throttle_cfs_rq(struct cfs_rq *cfs_rq)
 			dequeue = 0;
 	}
 
-	if (!se)
+	if (!se) {
+		sched_update_nr_prod(cpu_of(rq), task_delta, false);
 		rq->nr_running -= task_delta;
+	}
 
 	cfs_rq->throttled = 1;
 	cfs_rq->throttled_clock = rq->clock;
@@ -3855,8 +3894,10 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 			break;
 	}
 
-	if (!se)
+	if (!se) {
+		sched_update_nr_prod(cpu_of(rq), task_delta, true);
 		rq->nr_running += task_delta;
+	}
 
 	/* determine whether we need to wake up potentially idle cpu */
 	if (rq->curr == rq->idle && rq->cfs.nr_running)

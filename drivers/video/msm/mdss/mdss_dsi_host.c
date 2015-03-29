@@ -515,6 +515,7 @@ static void mdss_dsi_wait_clk_lane_to_stop(struct mdss_dsi_ctrl_pdata *ctrl)
 static void mdss_dsi_start_hs_clk_lane(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	mutex_lock(&ctrl->clk_lane_mutex);
+	mdss_dsi_clk_ctrl(ctrl, DSI_ALL_CLKS, 1);
 	if (ctrl->clk_lane_cnt) {
 		pr_err("%s: ndx=%d do-wait, cnt=%d\n",
 				__func__, ctrl->ndx, ctrl->clk_lane_cnt);
@@ -526,6 +527,7 @@ static void mdss_dsi_start_hs_clk_lane(struct mdss_dsi_ctrl_pdata *ctrl)
 	ctrl->clk_lane_cnt++;
 	pr_debug("%s: ndx=%d, set_hs, cnt=%d\n", __func__,
 				ctrl->ndx, ctrl->clk_lane_cnt);
+	mdss_dsi_clk_ctrl(ctrl, DSI_ALL_CLKS, 0);
 	mutex_unlock(&ctrl->clk_lane_mutex);
 }
 
@@ -542,6 +544,7 @@ static void mdss_dsi_stop_hs_clk_lane(struct mdss_dsi_ctrl_pdata *ctrl,
 	unsigned long flags;
 
 	mutex_lock(&ctrl->clk_lane_mutex);
+	mdss_dsi_clk_ctrl(ctrl, DSI_ALL_CLKS, 1);
 	if (ctrl->clk_lane_cnt != 1) {
 		pr_err("%s: ndx=%d wait had been done, cnt=%d\n",
 				__func__, ctrl->ndx, ctrl->clk_lane_cnt);
@@ -585,6 +588,7 @@ release:
 	pr_debug("%s: ndx=%d, cnt=%d\n", __func__,
 			ctrl->ndx, ctrl->clk_lane_cnt);
 
+	mdss_dsi_clk_ctrl(ctrl, DSI_ALL_CLKS, 0);
 	mutex_unlock(&ctrl->clk_lane_mutex);
 }
 
@@ -1598,12 +1602,14 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 	ctrl->dma_size = ALIGN(tp->len, SZ_4K);
 
 
+	ctrl->mdss_util->iommu_lock();
 	if (ctrl->mdss_util->iommu_attached()) {
 		int ret = msm_iommu_map_contig_buffer(tp->dmap,
 				ctrl->mdss_util->get_iommu_domain(domain), 0,
 				ctrl->dma_size, SZ_4K, 0, &(ctrl->dma_addr));
 		if (IS_ERR_VALUE(ret)) {
 			pr_err("unable to map dma memory to iommu(%d)\n", ret);
+			ctrl->mdss_util->iommu_unlock();
 			return -ENOMEM;
 		}
 		ctrl->dmap_iommu_map = true;
@@ -1692,6 +1698,7 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 	ctrl->dma_addr = 0;
 	ctrl->dma_size = 0;
 end:
+	ctrl->mdss_util->iommu_unlock();
 	return ret;
 }
 
@@ -1936,6 +1943,7 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 	struct dcs_cmd_req *req;
 	struct mdss_panel_info *pinfo;
 	struct mdss_rect *roi = NULL;
+	bool use_iommu = false;
 	int ret = -EINVAL;
 	int rc = 0;
 
@@ -1970,13 +1978,14 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 		 * alway set.
 		 */
 		if (!roi || (roi->w != 0 || roi->h != 0)) {
-			if (ctrl->hw_rev == MDSS_DSI_HW_REV_103 &&
+			if (ctrl->cmd_clk_ln_recovery_en &&
 					ctrl->panel_mode == DSI_CMD_MODE)
 				mdss_dsi_start_hs_clk_lane(ctrl);
 		}
 	} else {	/* from dcs send */
-		if (ctrl->hw_rev == MDSS_DSI_HW_REV_103 &&
-				ctrl->panel_mode == DSI_CMD_MODE)
+		if (ctrl->cmd_clk_ln_recovery_en &&
+				ctrl->panel_mode == DSI_CMD_MODE &&
+				(req->flags & CMD_REQ_HS_MODE))
 			mdss_dsi_cmd_start_hs_clk_lane(ctrl);
 	}
 
@@ -1996,7 +2005,7 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 		ctrl->mdss_util->bus_bandwidth_ctrl(1);
 
 	if (ctrl->mdss_util->bus_scale_set_quota)
-		ctrl->mdss_util->bus_scale_set_quota(MDSS_DSI_RT, SZ_1M, SZ_1M);
+		ctrl->mdss_util->bus_scale_set_quota(MDSS_DSI_RT, 0, SZ_1M);
 
 	pr_debug("%s:  from_mdp=%d pid=%d\n", __func__, from_mdp, current->pid);
 	mdss_dsi_clk_ctrl(ctrl, DSI_ALL_CLKS, 1);
@@ -2008,6 +2017,7 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 			mutex_unlock(&ctrl->cmd_mutex);
 			return rc;
 		}
+		use_iommu = true;
 	}
 
 	if (req->flags & CMD_REQ_HS_MODE)
@@ -2021,7 +2031,7 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 	if (req->flags & CMD_REQ_HS_MODE)
 		mdss_dsi_set_tx_power_mode(1, &ctrl->panel_data);
 
-	if (ctrl->mdss_util->iommu_ctrl)
+	if (use_iommu)
 		ctrl->mdss_util->iommu_ctrl(0);
 
 	mdss_dsi_clk_ctrl(ctrl, DSI_ALL_CLKS, 0);
@@ -2048,8 +2058,9 @@ need_lock:
 
 		mutex_unlock(&ctrl->cmd_mutex);
 	} else {	/* from dcs send */
-		if (ctrl->hw_rev == MDSS_DSI_HW_REV_103 &&
-				ctrl->panel_mode == DSI_CMD_MODE)
+		if (ctrl->cmd_clk_ln_recovery_en &&
+				ctrl->panel_mode == DSI_CMD_MODE &&
+				(req->flags & CMD_REQ_HS_MODE))
 			mdss_dsi_cmd_stop_hs_clk_lane(ctrl);
 	}
 
@@ -2354,7 +2365,7 @@ irqreturn_t mdss_dsi_isr(int irq, void *ptr)
 		MDSS_XLOG(ctrl->ndx, ctrl->mdp_busy, isr, 0x99);
 		spin_lock(&ctrl->mdp_lock);
 		mdss_dsi_disable_irq_nosync(ctrl, DSI_MDP_TERM);
-		if (ctrl->hw_rev == MDSS_DSI_HW_REV_103 &&
+		if (ctrl->cmd_clk_ln_recovery_en &&
 				ctrl->panel_mode == DSI_CMD_MODE) {
 			dsi_send_events(ctrl, DSI_EV_STOP_HS_CLK_LANE,
 							DSI_MDP_TERM);

@@ -740,7 +740,7 @@ extern void __blk_put_request(struct request_queue *, struct request *);
 extern struct request *blk_get_request(struct request_queue *, int, gfp_t);
 extern struct request *blk_make_request(struct request_queue *, struct bio *,
 					gfp_t);
-extern bool blk_requeue_request(struct request_queue *, struct request *);
+extern void blk_requeue_request(struct request_queue *, struct request *);
 extern int blk_reinsert_request(struct request_queue *q, struct request *rq);
 extern bool blk_reinsert_req_sup(struct request_queue *q);
 extern void blk_add_request_payload(struct request *rq, struct page *page,
@@ -962,6 +962,8 @@ extern void blk_queue_flush_queueable(struct request_queue *q, bool queueable);
 extern struct backing_dev_info *blk_get_backing_dev_info(struct block_device *bdev);
 
 extern int blk_rq_map_sg(struct request_queue *, struct request *, struct scatterlist *);
+extern int blk_rq_map_sg_no_cluster
+	(struct request_queue *, struct request *, struct scatterlist *);
 extern int blk_bio_map_sg(struct request_queue *q, struct bio *bio,
 			  struct scatterlist *sglist);
 extern void blk_dump_rq_flags(struct request *, char *);

@@ -47,6 +47,7 @@
 #include <linux/msm-bus.h>
 #include <linux/msm-bus-board.h>
 #include <soc/qcom/scm.h>
+#include <soc/qcom/rpm-smd.h>
 
 #include "mdss.h"
 #include "mdss_fb.h"
@@ -91,6 +92,7 @@ static DEFINE_SPINLOCK(mdp_lock);
 static DEFINE_MUTEX(mdp_clk_lock);
 static DEFINE_MUTEX(bus_bw_lock);
 static DEFINE_MUTEX(mdp_iommu_lock);
+static DEFINE_MUTEX(mdp_iommu_ref_cnt_lock);
 static DEFINE_MUTEX(mdp_fs_idle_pc_lock);
 
 static struct mdss_panel_intf pan_types[] = {
@@ -337,6 +339,7 @@ static int mdss_mdp_bus_scale_set_quota(u64 ab_quota_rt, u64 ab_quota_nrt,
 		u32 nrt_axi_port_cnt = mdss_res->nrt_axi_port_cnt;
 		u32 total_axi_port_cnt = mdss_res->axi_port_cnt;
 		u32 rt_axi_port_cnt = total_axi_port_cnt - nrt_axi_port_cnt;
+		int match_cnt = 0;
 
 		if (!bw_table || !total_axi_port_cnt ||
 		    total_axi_port_cnt > MAX_AXI_PORT_COUNT) {
@@ -374,6 +377,20 @@ static int mdss_mdp_bus_scale_set_quota(u64 ab_quota_rt, u64 ab_quota_nrt,
 				ab_quota[i] = ab_quota[0];
 				ib_quota[i] = ib_quota[0];
 			}
+		}
+
+		for (i = 0; i < total_axi_port_cnt; i++) {
+			vect = &bw_table->usecase
+				[mdss_res->curr_bw_uc_idx].vectors[i];
+			/* avoid performing updates for small changes */
+			if ((ab_quota[i] == vect->ab) &&
+				(ib_quota[i] == vect->ib))
+				match_cnt++;
+		}
+
+		if (match_cnt == total_axi_port_cnt) {
+			pr_debug("skip BW vote\n");
+			return 0;
 		}
 
 		new_uc_idx = (mdss_res->curr_bw_uc_idx %
@@ -657,12 +674,22 @@ static inline int is_mdss_iommu_attached(void)
 	return mdss_res->iommu_attached;
 }
 
+void mdss_iommu_lock(void)
+{
+	mutex_lock(&mdp_iommu_lock);
+}
+
+void mdss_iommu_unlock(void)
+{
+	mutex_unlock(&mdp_iommu_lock);
+}
+
 int mdss_iommu_ctrl(int enable)
 {
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 	int rc = 0;
 
-	mutex_lock(&mdp_iommu_lock);
+	mutex_lock(&mdp_iommu_ref_cnt_lock);
 	pr_debug("%pS: enable %d mdata->iommu_ref_cnt %d\n",
 		__builtin_return_address(0), enable, mdata->iommu_ref_cnt);
 
@@ -683,7 +710,7 @@ int mdss_iommu_ctrl(int enable)
 			pr_err("unbalanced iommu ref\n");
 		}
 	}
-	mutex_unlock(&mdp_iommu_lock);
+	mutex_unlock(&mdp_iommu_ref_cnt_lock);
 
 	if (IS_ERR_VALUE(rc))
 		return rc;
@@ -972,6 +999,7 @@ int mdss_iommu_attach(struct mdss_data_type *mdata)
 
 	MDSS_XLOG(mdata->iommu_attached);
 
+	mutex_lock(&mdp_iommu_lock);
 	if (mdata->iommu_attached) {
 		pr_debug("mdp iommu already attached\n");
 		goto end;
@@ -1000,6 +1028,7 @@ int mdss_iommu_attach(struct mdss_data_type *mdata)
 
 	mdata->iommu_attached = true;
 end:
+	mutex_unlock(&mdp_iommu_lock);
 	return rc;
 }
 
@@ -1011,9 +1040,10 @@ int mdss_iommu_dettach(struct mdss_data_type *mdata)
 
 	MDSS_XLOG(mdata->iommu_attached);
 
+	mutex_lock(&mdp_iommu_lock);
 	if (!mdata->iommu_attached) {
 		pr_debug("mdp iommu already dettached\n");
-		return 0;
+		goto end;
 	}
 
 	for (i = 0; i < MDSS_IOMMU_MAX_DOMAIN; i++) {
@@ -1029,7 +1059,8 @@ int mdss_iommu_dettach(struct mdss_data_type *mdata)
 	}
 
 	mdata->iommu_attached = false;
-
+end:
+	mutex_unlock(&mdp_iommu_lock);
 	return 0;
 }
 
@@ -1054,6 +1085,7 @@ int mdss_iommu_init(struct mdss_data_type *mdata)
 		layout.partitions = iomap->partitions;
 		layout.npartitions = iomap->npartitions;
 		layout.is_secure = (i == MDSS_IOMMU_DOMAIN_SECURE);
+		layout.domain_flags = 0;
 
 		iomap->domain_idx = msm_register_domain(&layout);
 		if (IS_ERR_VALUE(iomap->domain_idx))
@@ -1500,6 +1532,8 @@ static int mdss_mdp_probe(struct platform_device *pdev)
 
 	mdss_res->mdss_util->get_iommu_domain = mdss_get_iommu_domain;
 	mdss_res->mdss_util->iommu_attached = is_mdss_iommu_attached;
+	mdss_res->mdss_util->iommu_lock = mdss_iommu_lock;
+	mdss_res->mdss_util->iommu_unlock = mdss_iommu_unlock;
 	mdss_res->mdss_util->iommu_ctrl = mdss_iommu_ctrl;
 	mdss_res->mdss_util->bus_scale_set_quota = mdss_bus_scale_set_quota;
 	mdss_res->mdss_util->bus_bandwidth_ctrl = mdss_bus_bandwidth_ctrl;
@@ -2691,6 +2725,10 @@ static int mdss_mdp_parse_dt_misc(struct platform_device *pdev)
 
 	prop = of_find_property(pdev->dev.of_node, "batfet-supply", NULL);
 	mdata->batfet_required = prop ? true : false;
+	mdata->en_svs_high = of_property_read_bool(pdev->dev.of_node,
+		"qcom,mdss-en-svs-high");
+	if (!mdata->en_svs_high)
+		pr_debug("%s: svs_high is not enabled\n", __func__);
 	rc = of_property_read_u32(pdev->dev.of_node,
 		 "qcom,mdss-highest-bank-bit", &(mdata->highest_bank_bit));
 	if (rc)
@@ -3150,6 +3188,58 @@ exit:
 	return;
 }
 
+#define RPM_MISC_REQ_TYPE 0x6373696d
+#define RPM_MISC_REQ_SVS_PLUS_KEY 0x2B737673
+
+static void mdss_mdp_config_cx_voltage(struct mdss_data_type *mdata, int enable)
+{
+	int ret = 0;
+	static struct msm_rpm_kvp rpm_kvp;
+	static uint8_t svs_en;
+
+	if (!mdata->en_svs_high)
+		return;
+
+	if (!rpm_kvp.key) {
+		rpm_kvp.key = RPM_MISC_REQ_SVS_PLUS_KEY;
+		rpm_kvp.length = sizeof(unsigned);
+		pr_debug("%s: Initialized rpm_kvp structure\n", __func__);
+	}
+
+	if (enable) {
+		svs_en = 1;
+		rpm_kvp.data = &svs_en;
+		pr_debug("%s: voting for svs high\n", __func__);
+		ret = msm_rpm_send_message(MSM_RPM_CTX_ACTIVE_SET,
+					RPM_MISC_REQ_TYPE, 0,
+					&rpm_kvp, 1);
+		if (ret)
+			pr_err("vote for active_set svs high failed: %d\n",
+					ret);
+		ret = msm_rpm_send_message(MSM_RPM_CTX_SLEEP_SET,
+					RPM_MISC_REQ_TYPE, 0,
+					&rpm_kvp, 1);
+		if (ret)
+			pr_err("vote for sleep_set svs high failed: %d\n",
+					ret);
+	} else {
+		svs_en = 0;
+		rpm_kvp.data = &svs_en;
+		pr_debug("%s: Removing vote for svs high\n", __func__);
+		ret = msm_rpm_send_message(MSM_RPM_CTX_ACTIVE_SET,
+					RPM_MISC_REQ_TYPE, 0,
+					&rpm_kvp, 1);
+		if (ret)
+			pr_err("Remove vote:active_set svs high failed: %d\n",
+					ret);
+		ret = msm_rpm_send_message(MSM_RPM_CTX_SLEEP_SET,
+					RPM_MISC_REQ_TYPE, 0,
+					&rpm_kvp, 1);
+		if (ret)
+			pr_err("Remove vote:sleep_set svs high failed: %d\n",
+					ret);
+	}
+}
 
 static int mdss_mdp_cx_ctrl(struct mdss_data_type *mdata, int enable)
 {
@@ -3223,6 +3313,8 @@ static void mdss_mdp_footswitch_ctrl(struct mdss_data_type *mdata, int on)
 				mdss_mdp_batfet_ctrl(mdata, true);
 			}
 		}
+		if (mdata->en_svs_high)
+			mdss_mdp_config_cx_voltage(mdata, true);
 		mdata->fs_ena = true;
 	} else {
 		if (mdata->fs_ena) {
@@ -3240,6 +3332,8 @@ static void mdss_mdp_footswitch_ctrl(struct mdss_data_type *mdata, int on)
 				mdss_mdp_cx_ctrl(mdata, false);
 				mdss_mdp_batfet_ctrl(mdata, false);
 			}
+			if (mdata->en_svs_high)
+				mdss_mdp_config_cx_voltage(mdata, false);
 			regulator_disable(mdata->fs);
 		}
 		mdata->fs_ena = false;

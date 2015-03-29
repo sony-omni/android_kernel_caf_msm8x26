@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Sony Mobile Communications AB.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -141,6 +141,7 @@ enum qpnp_iadc_channels {
 #define QPNP_ADC_625_UV	625000
 #define QPNP_ADC_HWMON_NAME_LENGTH				64
 #define QPNP_MAX_PROP_NAME_LEN					32
+#define QPNP_THERMALNODE_NAME_LENGTH                            25
 
 /* Structure device for qpnp vadc */
 struct qpnp_vadc_chip;

@@ -966,6 +966,20 @@ static int adreno_init(struct kgsl_device *device)
 	int i;
 	int ret;
 
+	/*
+	 * If the microcode read fails then either the usermodehelper wasn't
+	 * available or there was a corruption problem - in either case fail the
+	 * open and force the user to try again
+	 */
+
+	ret = adreno_ringbuffer_read_pm4_ucode(device);
+	if (ret)
+		return ret;
+
+	ret = adreno_ringbuffer_read_pfp_ucode(device);
+	if (ret)
+		return ret;
+
 	kgsl_pwrctrl_change_state(device, KGSL_STATE_INIT);
 	/*
 	 * initialization only needs to be done once initially until
@@ -981,9 +995,6 @@ static int adreno_init(struct kgsl_device *device)
 
 	/* Initialize coresight for the target */
 	adreno_coresight_init(adreno_dev);
-
-	adreno_ringbuffer_read_pm4_ucode(device);
-	adreno_ringbuffer_read_pfp_ucode(device);
 
 	kgsl_pwrctrl_change_state(device, KGSL_STATE_INIT);
 	/*
@@ -1251,13 +1262,14 @@ static int adreno_start(struct kgsl_device *device, int priority)
  * adreno_vbif_clear_pending_transactions() - Clear transactions in VBIF pipe
  * @device: Pointer to the device whose VBIF pipe is to be cleared
  */
-static void adreno_vbif_clear_pending_transactions(struct kgsl_device *device)
+static int adreno_vbif_clear_pending_transactions(struct kgsl_device *device)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
 	unsigned int mask = gpudev->vbif_xin_halt_ctrl0_mask;
 	unsigned int val;
 	unsigned long wait_for_vbif;
+	int ret = 0;
 
 	adreno_writereg(adreno_dev, ADRENO_REG_VBIF_XIN_HALT_CTRL0, mask);
 	/* wait for the transactions to clear */
@@ -1270,10 +1282,12 @@ static void adreno_vbif_clear_pending_transactions(struct kgsl_device *device)
 		if (time_after(jiffies, wait_for_vbif)) {
 			KGSL_DRV_ERR(device,
 				"Wait limit reached for VBIF XIN Halt\n");
+			ret = -ETIMEDOUT;
 			break;
 		}
 	}
 	adreno_writereg(adreno_dev, ADRENO_REG_VBIF_XIN_HALT_CTRL0, 0);
+	return ret;
 }
 
 static int adreno_stop(struct kgsl_device *device)
@@ -1329,11 +1343,9 @@ int adreno_reset(struct kgsl_device *device)
 	struct kgsl_mmu *mmu = &device->mmu;
 	int i = 0;
 
-	/* clear pending vbif transactions before reset */
-	adreno_vbif_clear_pending_transactions(device);
-
 	/* Try soft reset first, for non mmu fault case only */
-	if (!atomic_read(&mmu->fault)) {
+	if (!adreno_vbif_clear_pending_transactions(device) &&
+		!atomic_read(&mmu->fault)) {
 		ret = adreno_soft_reset(device);
 		if (ret)
 			KGSL_DEV_ERR_ONCE(device, "Device soft reset failed\n");
@@ -2223,7 +2235,7 @@ bool adreno_hw_isidle(struct adreno_device *adreno_dev)
 	adreno_readreg(adreno_dev, ADRENO_REG_RBBM_STATUS,
 		&reg_rbbm_status);
 
-	if (reg_rbbm_status & ~0x80000001)
+	if (reg_rbbm_status & ADRENO_RBBM_STATUS_BUSY_MASK)
 		return false;
 
 	/* Don't consider ourselves idle if there is an IRQ pending */

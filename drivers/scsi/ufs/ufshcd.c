@@ -6604,6 +6604,41 @@ static int ufshcd_ioctl(struct scsi_device *dev, int cmd, void __user *buffer)
 	return err;
 }
 
+static enum blk_eh_timer_return ufshcd_eh_timed_out(struct scsi_cmnd *scmd)
+{
+	unsigned long flags;
+	struct Scsi_Host *host;
+	struct ufs_hba *hba;
+	int index;
+	bool found = false;
+
+	if (!scmd || !scmd->device || !scmd->device->host)
+		return BLK_EH_NOT_HANDLED;
+
+	host = scmd->device->host;
+	hba = shost_priv(host);
+	if (!hba)
+		return BLK_EH_NOT_HANDLED;
+
+	spin_lock_irqsave(host->host_lock, flags);
+
+	for_each_set_bit(index, &hba->outstanding_reqs, hba->nutrs) {
+		if (hba->lrb[index].cmd == scmd) {
+			found = true;
+			break;
+		}
+	}
+
+	spin_unlock_irqrestore(host->host_lock, flags);
+
+	/*
+	 * Bypass SCSI error handling and reset the block layer timer if this
+	 * SCSI command was not actually dispatched to UFS driver, otherwise
+	 * let SCSI layer handle the error as usual.
+	 */
+	return found ? BLK_EH_NOT_HANDLED : BLK_EH_RESET_TIMER;
+}
+
 static struct scsi_host_template ufshcd_driver_template = {
 	.module			= THIS_MODULE,
 	.name			= UFSHCD,
@@ -6616,6 +6651,7 @@ static struct scsi_host_template ufshcd_driver_template = {
 	.eh_abort_handler	= ufshcd_abort,
 	.eh_device_reset_handler = ufshcd_eh_device_reset_handler,
 	.eh_host_reset_handler   = ufshcd_eh_host_reset_handler,
+	.eh_timed_out		= ufshcd_eh_timed_out,
 	.ioctl			= ufshcd_ioctl,
 	.this_id		= -1,
 	.sg_tablesize		= SG_ALL,
@@ -7077,6 +7113,7 @@ static void ufshcd_hba_exit(struct ufs_hba *hba)
 	if (hba->is_powered) {
 		ufshcd_variant_hba_exit(hba);
 		ufshcd_setup_vreg(hba, false);
+		ufshcd_suspend_clkscaling(hba);
 		ufshcd_setup_clocks(hba, false);
 		ufshcd_setup_hba_vreg(hba, false);
 		hba->is_powered = false;
@@ -7407,6 +7444,7 @@ vops_resume:
 	if (hba->vops && hba->vops->resume)
 		hba->vops->resume(hba, pm_op);
 set_link_active:
+	ufshcd_resume_clkscaling(hba);
 	ufshcd_vreg_set_hpm(hba);
 	if (ufshcd_is_link_hibern8(hba) && !ufshcd_uic_hibern8_exit(hba)) {
 		ufshcd_set_link_active(hba);
@@ -7543,6 +7581,7 @@ disable_vreg:
 	ufshcd_vreg_set_lpm(hba);
 disable_irq_and_vops_clks:
 	ufshcd_disable_irq(hba);
+	ufshcd_suspend_clkscaling(hba);
 	ufshcd_setup_clocks(hba, false);
 out:
 	hba->pm_op_in_progress = 0;
