@@ -507,3 +507,11 @@ CONFIG_CRYPTO_TWOFISH=y
 CONFIG_CRYPTO_DEV_QCRYPTO=m
 CONFIG_CRYPTO_DEV_QCE=y
 CONFIG_CRYPTO_DEV_QCEDEV=y
+<<<<<<< HEAD:arch/arm/configs/msm8974-perf_defconfig
+=======
+CONFIG_REED_SOLOMON=y
+CONFIG_REED_SOLOMON_ENC8=y
+CONFIG_REED_SOLOMON_DEC8=y
+CONFIG_PRONTO_WLAN=y
+CONFIG_PRIMA_WLAN_LFR=y
+>>>>>>> c16be4d... prima: enable buildin wireless driver:arch/arm/configs/aosp_rhine_amami_row_defconfig
