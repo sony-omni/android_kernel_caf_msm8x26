@@ -53,6 +53,15 @@
 		};
 	};
 
+	memory {
+		cont_splash_mem: cont_splash_mem@0 {
+			linux,reserve-contiguous-region;
+			linux,reserve,region;
+			reg = <0 0x03400000 0 0xFA0000>;
+			label = "cont_splash_mem";
+		};
+	};
+
 	soc: soc { };
 };
 
@@ -1208,6 +1217,7 @@
 
 		qcom,firmware-name = "modem";
 		qcom,pil-self-auth;
+		qcom,mba-image-is-not-elf;
 		qcom,sysmon-id = <0>;
 		qcom,ssctl-instance-id = <0x12>;
 
