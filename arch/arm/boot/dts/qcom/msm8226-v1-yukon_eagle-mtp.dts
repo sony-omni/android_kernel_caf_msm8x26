@@ -23,9 +23,6 @@
 	qcom,board-id = <8 0>;
 };
 
-&cci {
-	/* Rotate rear camera to 180 degrees */
-	qcom,camera@6f {
-	qcom,mount-angle = <180>;
-	};
+&mdss_fb0 {
+	qcom,mdss-fb-splash-logo-enabled;
 };
