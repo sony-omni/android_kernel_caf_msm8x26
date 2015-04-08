@@ -1010,6 +1010,7 @@
 		qcom,aux-clk-sync;
 
 		qcom,ep-latency = <10>;
+		qcom,vbg-opt;
 
 		qcom,ep-wakeirq;
 
@@ -2784,8 +2785,8 @@
 			qcom,peer-bam = <2>;
 			qcom,src-bam-physical-address = <0xf9304000>;
 			qcom,src-bam-pipe-index = <1>;
-			qcom,data-fifo-size = <0x8000>;
-			qcom,descriptor-fifo-size = <0x2000>;
+			qcom,data-fifo-size = <0xFFFF>;
+			qcom,descriptor-fifo-size = <0x4000>;
 			qcom,reset-bam-on-connect;
 		};
 		qcom,pipe1 {
@@ -2797,8 +2798,8 @@
 			qcom,peer-bam = <2>;
 			qcom,dst-bam-physical-address = <0xf9304000>;
 			qcom,dst-bam-pipe-index = <0>;
-			qcom,data-fifo-size = <0x8000>;
-			qcom,descriptor-fifo-size = <0x2000>;
+			qcom,data-fifo-size = <0xFFFF>;
+			qcom,descriptor-fifo-size = <0x4000>;
 			qcom,reset-bam-on-connect;
 		};
 		qcom,pipe2 {
@@ -2860,6 +2861,13 @@
 		usb-phy = <&qusb_phy>;
 		qcom,pm-qos-latency = <30001>;
 
+		qcom,msm-bus,name = "usb-hs";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<87 512 0 0>,
+				<87 512 40000 60000>;
+
 		clocks = <&clock_gcc clk_gcc_usb_hs_system_clk>,
 			 <&clock_gcc clk_gcc_usb_hs_ahb_clk>,
 			 <&clock_rpm clk_cxo_otg_clk>;
@@ -2887,7 +2895,6 @@
 		compatible = "qcom,android-usb";
 		reg = <0xfe80f0c8 0xc8>;
 		qcom,pm-qos-latency = <61 637 1261>;
-		qcom,android-usb-uicc-nluns = /bits/ 8 <1>;
 	};
 
 	audio_heap {

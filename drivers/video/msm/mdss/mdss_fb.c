@@ -666,6 +666,25 @@ static ssize_t mdss_fb_get_panel_status(struct device *dev,
 	return ret;
 }
 
+static ssize_t mdss_fb_force_panel_dead(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t len)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+	struct mdss_panel_data *pdata;
+
+	pdata = dev_get_platdata(&mfd->pdev->dev);
+	if (!pdata) {
+		pr_err("no panel connected!\n");
+		return len;
+	}
+
+	if (sscanf(buf, "%d", &pdata->panel_info.panel_force_dead) != 1)
+		pr_err("sccanf buf error!\n");
+
+	return len;
+}
+
 /*
  * mdss_fb_blanking_mode_switch() - Function triggers dynamic mode switch
  * @mfd:	Framebuffer data structure for display
@@ -818,8 +837,8 @@ static DEVICE_ATTR(msm_fb_src_split_info, S_IRUGO, mdss_fb_get_src_split_info,
 	NULL);
 static DEVICE_ATTR(msm_fb_thermal_level, S_IRUGO | S_IWUSR,
 	mdss_fb_get_thermal_level, mdss_fb_set_thermal_level);
-static DEVICE_ATTR(msm_fb_panel_status, S_IRUGO,
-	mdss_fb_get_panel_status, NULL);
+static DEVICE_ATTR(msm_fb_panel_status, S_IRUGO | S_IWUSR,
+	mdss_fb_get_panel_status, mdss_fb_force_panel_dead);
 static DEVICE_ATTR(msm_fb_dfps_mode, S_IRUGO | S_IWUSR,
 	mdss_fb_get_dfps_mode, mdss_fb_change_dfps_mode);
 static struct attribute *mdss_fb_attrs[] = {
@@ -905,6 +924,7 @@ static int mdss_fb_probe(struct platform_device *pdev)
 	mfd->bl_min_lvl = 30;
 	mfd->ad_bl_level = 0;
 	mfd->fb_imgType = MDP_RGBA_8888;
+	mfd->calib_mode_bl = 0;
 
 	mfd->pdev = pdev;
 
@@ -1580,7 +1600,16 @@ static int mdss_fb_blank_unblank(struct msm_fb_data_type *mfd)
 		mutex_lock(&mfd->bl_lock);
 		if (!mfd->bl_updated) {
 			mfd->bl_updated = 1;
-			mdss_fb_set_backlight(mfd, mfd->unset_bl_level);
+			/*
+			 * If in AD calibration mode then frameworks would not
+			 * be allowed to update backlight hence post unblank
+			 * the backlight would remain 0 (0 is set in blank).
+			 * Hence resetting back to calibration mode value
+			 */
+			if (!IS_CALIB_MODE_BL(mfd))
+				mdss_fb_set_backlight(mfd, mfd->unset_bl_level);
+			else
+				mdss_fb_set_backlight(mfd, mfd->calib_mode_bl);
 		}
 		mutex_unlock(&mfd->bl_lock);
 	}
@@ -2452,7 +2481,7 @@ static int mdss_fb_open(struct fb_info *info, int user)
 		pr_err_once("Shutdown pending. Aborting operation. Request from pid:%d name=%s\n",
 			pid, task->comm);
 		sysfs_notify(&mfd->fbi->dev->kobj, NULL, "show_blank_event");
-		return -EPERM;
+		return -ESHUTDOWN;
 	}
 
 	file_info = kmalloc(sizeof(*file_info), GFP_KERNEL);
@@ -2909,7 +2938,7 @@ static int mdss_fb_pan_idle(struct msm_fb_data_type *mfd)
 		MDSS_XLOG_TOUT_HANDLER("mdp", "panic");
 	} else if (mfd->shutdown_pending) {
 		pr_debug("Shutdown signalled\n");
-		return -EPERM;
+		return -ESHUTDOWN;
 	}
 
 	return 0;
@@ -2934,7 +2963,7 @@ static int mdss_fb_wait_for_kickoff(struct msm_fb_data_type *mfd)
 		MDSS_XLOG_TOUT_HANDLER("mdp", "panic");
 	} else if (mfd->shutdown_pending) {
 		pr_debug("Shutdown signalled\n");
-		return -EPERM;
+		return -ESHUTDOWN;
 	}
 
 	return 0;
@@ -3842,7 +3871,7 @@ int mdss_fb_do_ioctl(struct fb_info *info, unsigned int cmd,
 		return -EINVAL;
 
 	if (mfd->shutdown_pending)
-		return -EPERM;
+		return -ESHUTDOWN;
 
 	pdata = dev_get_platdata(&mfd->pdev->dev);
 	if (!pdata || pdata->panel_info.dynamic_switch_pending)

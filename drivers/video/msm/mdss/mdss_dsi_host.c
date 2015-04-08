@@ -991,6 +991,8 @@ int mdss_dsi_reg_status_check(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 		return 0;
 	}
 
+	mutex_lock(&ctrl_pdata->cmd_mutex);
+
 	pr_debug("%s: Checking Register status\n", __func__);
 
 	mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 1);
@@ -1016,6 +1018,8 @@ int mdss_dsi_reg_status_check(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 
 	mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 0);
 	pr_debug("%s: Read register done with ret: %d\n", __func__, ret);
+
+	mutex_unlock(&ctrl_pdata->cmd_mutex);
 
 	return ret;
 }
@@ -1154,6 +1158,8 @@ int mdss_dsi_bta_status_check(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 		return 0;
 	}
 
+	mutex_lock(&ctrl_pdata->cmd_mutex);
+
 	pr_debug("%s: Checking BTA status\n", __func__);
 
 	mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 1);
@@ -1173,6 +1179,8 @@ int mdss_dsi_bta_status_check(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 
 	mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 0);
 	pr_debug("%s: BTA done with ret: %d\n", __func__, ret);
+
+	mutex_unlock(&ctrl_pdata->cmd_mutex);
 
 	return ret;
 }
@@ -2136,7 +2144,7 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 
 		if (ctrl->mdss_util->bus_scale_set_quota)
 			ctrl->mdss_util->bus_scale_set_quota(MDSS_DSI_RT,
-								SZ_1M, SZ_1M);
+								0, SZ_1M);
 
 		if (ctrl->mdss_util->iommu_ctrl) {
 			rc = ctrl->mdss_util->iommu_ctrl(1);

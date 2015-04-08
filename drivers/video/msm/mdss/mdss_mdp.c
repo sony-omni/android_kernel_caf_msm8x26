@@ -340,6 +340,7 @@ static int mdss_mdp_bus_scale_set_quota(u64 ab_quota_rt, u64 ab_quota_nrt,
 		u32 nrt_axi_port_cnt = mdss_res->nrt_axi_port_cnt;
 		u32 total_axi_port_cnt = mdss_res->axi_port_cnt;
 		u32 rt_axi_port_cnt = total_axi_port_cnt - nrt_axi_port_cnt;
+		int match_cnt = 0;
 
 		if (!bw_table || !total_axi_port_cnt ||
 		    total_axi_port_cnt > MAX_AXI_PORT_COUNT) {
@@ -377,6 +378,20 @@ static int mdss_mdp_bus_scale_set_quota(u64 ab_quota_rt, u64 ab_quota_nrt,
 				ab_quota[i] = ab_quota[0];
 				ib_quota[i] = ib_quota[0];
 			}
+		}
+
+		for (i = 0; i < total_axi_port_cnt; i++) {
+			vect = &bw_table->usecase
+				[mdss_res->curr_bw_uc_idx].vectors[i];
+			/* avoid performing updates for small changes */
+			if ((ab_quota[i] == vect->ab) &&
+				(ib_quota[i] == vect->ib))
+				match_cnt++;
+		}
+
+		if (match_cnt == total_axi_port_cnt) {
+			pr_debug("skip BW vote\n");
+			return 0;
 		}
 
 		new_uc_idx = (mdss_res->curr_bw_uc_idx %
@@ -1079,6 +1094,7 @@ int mdss_iommu_init(struct mdss_data_type *mdata)
 		layout.partitions = iomap->partitions;
 		layout.npartitions = iomap->npartitions;
 		layout.is_secure = (i == MDSS_IOMMU_DOMAIN_SECURE);
+		layout.domain_flags = 0;
 
 		iomap->domain_idx = msm_register_domain(&layout);
 		if (IS_ERR_VALUE(iomap->domain_idx))
@@ -1142,8 +1158,22 @@ static int mdss_mdp_debug_init(struct platform_device *pdev,
 	return 0;
 }
 
+static u32 mdss_get_props(void)
+{
+	u32 props = 0;
+	void __iomem *props_base = ioremap(0xFC4B8114, 4);
+	if (props_base) {
+		props = readl_relaxed(props_base);
+		iounmap(props_base);
+	}
+	return props;
+}
+
 static void mdss_mdp_hw_rev_caps_init(struct mdss_data_type *mdata)
 {
+	/* prevent disable of prefill calculations */
+	mdata->min_prefill_lines = 0xffff;
+
 	switch (mdata->mdp_rev) {
 	case MDSS_MDP_HW_REV_105:
 	case MDSS_MDP_HW_REV_109:
@@ -1155,6 +1185,13 @@ static void mdss_mdp_hw_rev_caps_init(struct mdss_data_type *mdata)
 		mdss_set_quirk(mdata, MDSS_QUIRK_BWCPANIC);
 		mdata->max_target_zorder = 4; /* excluding base layer */
 		mdata->max_cursor_size = 128;
+		mdata->min_prefill_lines = 12;
+		mdata->props = mdss_get_props();
+		break;
+	case MDSS_MDP_HW_REV_107:
+		mdata->max_target_zorder = 4; /* excluding base layer */
+		mdata->max_cursor_size = 64;
+		mdata->min_prefill_lines = 21;
 		break;
 	default:
 		mdata->max_target_zorder = 4; /* excluding base layer */
@@ -1454,6 +1491,8 @@ static ssize_t mdss_mdp_show_capabilities(struct device *dev,
 	SPRINT("smp_mb_per_pipe=%d\n", mdata->smp_mb_per_pipe);
 	SPRINT("max_downscale_ratio=%d\n", MAX_DOWNSCALE_RATIO);
 	SPRINT("max_upscale_ratio=%d\n", MAX_UPSCALE_RATIO);
+	if (mdata->props)
+		SPRINT("props=%d", mdata->props);
 	if (mdata->max_bw_low)
 		SPRINT("max_bandwidth_low=%u\n", mdata->max_bw_low);
 	if (mdata->max_bw_high)

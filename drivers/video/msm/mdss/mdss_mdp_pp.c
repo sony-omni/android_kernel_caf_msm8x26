@@ -1736,10 +1736,6 @@ static int pp_dspp_setup(u32 disp_num, struct mdss_mdp_mixer *mixer)
 		ad_flags = 0;
 	}
 
-	/* call calibration specific processing here */
-	if (ctl->mfd->calib_mode)
-		goto flush_exit;
-
 	/* nothing to update */
 	if ((!flags) && (!(opmode)) && (!ad_flags))
 		goto dspp_exit;
@@ -1802,7 +1798,6 @@ static int pp_dspp_setup(u32 disp_num, struct mdss_mdp_mixer *mixer)
 opmode_config:
 	pp_dspp_opmode_config(ctl, dspp_num, pp_sts, mdata->mdp_rev, &opmode);
 
-flush_exit:
 	if (ad_hw) {
 		mutex_lock(&ad->lock);
 		ad_flags = ad->reg_sts;
@@ -2228,12 +2223,10 @@ static int pp_ad_calc_bl(struct msm_fb_data_type *mfd, int bl_in, int *bl_out,
 		return -EPERM;
 	}
 
-	if (!ad->bl_mfd || !ad->bl_mfd->panel_info ||
-		!ad->bl_att_lut) {
-		pr_err("Invalid ad info: bl_mfd = 0x%p, ad->bl_mfd->panel_info = 0x%p, bl_att_lut = 0x%p\n",
+	if (!ad->bl_mfd || !ad->bl_mfd->panel_info) {
+		pr_err("Invalid ad info: bl_mfd = 0x%p, ad->bl_mfd->panel_info = 0x%p\n",
 			ad->bl_mfd,
-			(!ad->bl_mfd) ? NULL : ad->bl_mfd->panel_info,
-			ad->bl_att_lut);
+			(!ad->bl_mfd) ? NULL : ad->bl_mfd->panel_info);
 		mutex_unlock(&ad->lock);
 		return -EINVAL;
 	}
@@ -4598,7 +4591,7 @@ int mdss_mdp_ad_input(struct msm_fb_data_type *mfd,
 	mutex_lock(&ad->lock);
 	if ((!PP_AD_STATE_IS_INITCFG(ad->state) &&
 			!PP_AD_STS_IS_DIRTY(ad->sts)) &&
-			!input->mode == MDSS_AD_MODE_CALIB) {
+			(input->mode != MDSS_AD_MODE_CALIB)) {
 		pr_warn("AD not initialized or configured.\n");
 		ret = -EPERM;
 		goto error;
@@ -4657,6 +4650,7 @@ int mdss_mdp_ad_input(struct msm_fb_data_type *mfd,
 			mdss_fb_set_backlight(mfd, bl);
 			mutex_unlock(&mfd->bl_lock);
 			mutex_lock(&ad->lock);
+			mfd->calib_mode_bl = bl;
 		} else {
 			pr_warn("should be in calib mode\n");
 		}
@@ -5016,10 +5010,10 @@ static int mdss_mdp_ad_setup(struct msm_fb_data_type *mfd)
 			/* Clear state and regs when going to off state*/
 			ad->sts = 0;
 			ad->sts |= PP_AD_STS_DIRTY_VSYNC;
-			ad->state &= !PP_AD_STATE_INIT;
-			ad->state &= !PP_AD_STATE_CFG;
-			ad->state &= !PP_AD_STATE_DATA;
-			ad->state &= !PP_AD_STATE_BL_LIN;
+			ad->state &= ~PP_AD_STATE_INIT;
+			ad->state &= ~PP_AD_STATE_CFG;
+			ad->state &= ~PP_AD_STATE_DATA;
+			ad->state &= ~PP_AD_STATE_BL_LIN;
 			ad->ad_data = 0;
 			ad->ad_data_mode = 0;
 			ad->last_bl = 0;

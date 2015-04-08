@@ -34,6 +34,7 @@
 #include <linux/rtc.h>
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/batterydata-lib.h>
+#include <linux/msm_bcl.h>
 
 /* Mask/Bit helpers */
 #define _SMB_MASK(BITS, POS) \
@@ -94,6 +95,7 @@ struct smbchg_chip {
 	int				usb_tl_current_ma;
 	int				dc_target_current_ma;
 	int				target_fastchg_current_ma;
+	int				cfg_fastchg_current_ma;
 	int				fastchg_current_ma;
 	int				vfloat_mv;
 	int				fastchg_current_comp;
@@ -134,6 +136,7 @@ struct smbchg_chip {
 	/* flash current prediction */
 	int				rpara_uohm;
 	int				rslow_uohm;
+	int				vled_max_uv;
 
 	/* vfloat adjustment */
 	int				max_vbat_sample;
@@ -1521,10 +1524,10 @@ static int smbchg_set_fastchg_current_raw(struct smbchg_chip *chip,
 		dev_err(chip->dev, "cannot write to fcc cfg rc = %d\n", rc);
 		return rc;
 	}
-	pr_smb(PR_STATUS, "fastcharge current set to %d\n",
-			current_ma);
+	pr_smb(PR_STATUS, "fastcharge current requested %d, set to %d\n",
+			current_ma, usb_current_table[cur_val]);
 
-	chip->fastchg_current_ma = usb_current_table[i];
+	chip->fastchg_current_ma = usb_current_table[cur_val];
 	return rc;
 }
 
@@ -1559,8 +1562,7 @@ static int smbchg_sw_esr_pulse_en(struct smbchg_chip *chip, bool en)
 	int rc;
 
 	chip->sw_esr_pulse_en = en;
-	rc = smbchg_set_fastchg_current_raw(chip,
-			chip->target_fastchg_current_ma);
+	rc = smbchg_set_fastchg_current(chip, chip->target_fastchg_current_ma);
 	if (rc)
 		return rc;
 	rc = smbchg_parallel_usb_charging_en(chip, !en);
@@ -1571,6 +1573,7 @@ static int smbchg_sw_esr_pulse_en(struct smbchg_chip *chip, bool en)
 #define AICL_EN_BIT				BIT(2)
 static void smbchg_rerun_aicl(struct smbchg_chip *chip)
 {
+	pr_smb(PR_STATUS, "Rerunning AICL...\n");
 	smbchg_sec_masked_write(chip, chip->usb_chgpth_base + USB_AICL_CFG,
 			AICL_EN_BIT, 0);
 	/* Add a delay so that AICL successfully clears */
@@ -1608,6 +1611,7 @@ static void smbchg_parallel_usb_disable(struct smbchg_chip *chip)
 	power_supply_set_current_limit(parallel_psy,
 				SUSPEND_CURRENT_MA * 1000);
 	power_supply_set_present(parallel_psy, false);
+	chip->target_fastchg_current_ma = chip->cfg_fastchg_current_ma;
 	smbchg_set_fastchg_current(chip, chip->target_fastchg_current_ma);
 	chip->usb_tl_current_ma =
 		calc_thermal_limited_current(chip, chip->usb_target_current_ma);
@@ -1647,8 +1651,12 @@ try_again:
 		smbchg_parallel_usb_disable(chip);
 		goto done;
 	}
-	pval.intval = 1000 * ((parallel_fcc_ma
+	pval.intval = ((parallel_fcc_ma
 			* PARALLEL_FCC_PERCENT_REDUCTION) / 100);
+	pr_smb(PR_STATUS, "reducing FCC of parallel charger to %d\n",
+		pval.intval);
+	/* Change it to uA */
+	pval.intval *= 1000;
 	parallel_psy->set_property(parallel_psy,
 			POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, &pval);
 	/*
@@ -1673,6 +1681,20 @@ done:
 	mutex_unlock(&chip->parallel.lock);
 }
 
+static bool smbchg_is_aicl_complete(struct smbchg_chip *chip)
+{
+	int rc;
+	u8 reg;
+
+	rc = smbchg_read(chip, &reg,
+			chip->usb_chgpth_base + ICL_STS_1_REG, 1);
+	if (rc) {
+		dev_err(chip->dev, "Could not read usb icl sts 1: %d\n", rc);
+		return true;
+	}
+	return (reg & AICL_STS_BIT) != 0;
+}
+
 static int smbchg_get_aicl_level_ma(struct smbchg_chip *chip)
 {
 	int rc;
@@ -1685,6 +1707,10 @@ static int smbchg_get_aicl_level_ma(struct smbchg_chip *chip)
 		return 0;
 	}
 	reg &= ICL_STS_MASK;
+	if (reg & AICL_SUSP_BIT) {
+		pr_warn("AICL suspended: %02x\n", reg);
+		return 0;
+	}
 	if (reg >= ARRAY_SIZE(usb_current_table)) {
 		pr_warn("invalid AICL value: %02x\n", reg);
 		return 0;
@@ -1692,17 +1718,24 @@ static int smbchg_get_aicl_level_ma(struct smbchg_chip *chip)
 	return usb_current_table[reg];
 }
 
+#define PARALLEL_CHG_THRESHOLD_CURRENT	1800
 static void smbchg_parallel_usb_enable(struct smbchg_chip *chip)
 {
 	struct power_supply *parallel_psy = get_parallel_psy(chip);
 	union power_supply_propval pval = {0, };
 	int current_limit_ma, parallel_cl_ma, total_current_ma;
-	int new_parallel_cl_ma, min_current_thr_ma;
+	int new_parallel_cl_ma, min_current_thr_ma, rc;
 
 	if (!parallel_psy)
 		return;
 
 	pr_smb(PR_STATUS, "Attempting to enable parallel charger\n");
+	/* Suspend the parallel charger if the charging current is < 1800 mA */
+	if (chip->cfg_fastchg_current_ma < PARALLEL_CHG_THRESHOLD_CURRENT) {
+		pr_smb(PR_STATUS, "suspend parallel charger as FCC is %d\n",
+			chip->cfg_fastchg_current_ma);
+		goto disable_parallel;
+	}
 	min_current_thr_ma = smbchg_get_min_parallel_current_ma(chip);
 	if (min_current_thr_ma <= 0) {
 		pr_smb(PR_STATUS, "parallel charger unavailable for thr: %d\n",
@@ -1762,9 +1795,16 @@ static void smbchg_parallel_usb_enable(struct smbchg_chip *chip)
 
 	taper_irq_en(chip, true);
 	chip->parallel.current_max_ma = new_parallel_cl_ma;
+	rc = power_supply_set_voltage_limit(parallel_psy, chip->vfloat_mv + 50);
+	if (rc) {
+		dev_err(chip->dev, "Couldn't set float voltage on parallel psy rc: %d\n",
+			rc);
+		goto disable_parallel;
+	}
 	power_supply_set_present(parallel_psy, true);
-	smbchg_set_fastchg_current(chip, chip->target_fastchg_current_ma / 2);
-	pval.intval = chip->target_fastchg_current_ma * 1000 / 2;
+	chip->target_fastchg_current_ma = chip->cfg_fastchg_current_ma / 2;
+	smbchg_set_fastchg_current(chip, chip->target_fastchg_current_ma);
+	pval.intval = chip->target_fastchg_current_ma * 1000;
 	parallel_psy->set_property(parallel_psy,
 			POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, &pval);
 	smbchg_set_usb_current_max(chip, chip->parallel.current_max_ma);
@@ -1787,8 +1827,12 @@ static void smbchg_parallel_usb_en_work(struct work_struct *work)
 
 	smbchg_relax(chip, PM_PARALLEL_CHECK);
 	mutex_lock(&chip->parallel.lock);
-	if (smbchg_is_parallel_usb_ok(chip))
+	if (smbchg_is_parallel_usb_ok(chip)) {
 		smbchg_parallel_usb_enable(chip);
+	} else if (chip->parallel.current_max_ma != 0) {
+		pr_smb(PR_STATUS, "parallel charging unavailable\n");
+		smbchg_parallel_usb_disable(chip);
+	}
 	mutex_unlock(&chip->parallel.lock);
 }
 
@@ -1820,6 +1864,37 @@ static int smbchg_usb_en(struct smbchg_chip *chip, bool enable,
 
 	if (changed)
 		smbchg_parallel_usb_check_ok(chip);
+	return rc;
+}
+
+static int smbchg_set_fastchg_current_user(struct smbchg_chip *chip,
+							int current_ma)
+{
+	int rc = 0;
+
+	mutex_lock(&chip->parallel.lock);
+	pr_smb(PR_STATUS, "User setting FCC to %d\n", current_ma);
+	chip->cfg_fastchg_current_ma = current_ma;
+	if (smbchg_is_parallel_usb_ok(chip)) {
+		smbchg_parallel_usb_enable(chip);
+	} else {
+		if (chip->parallel.current_max_ma != 0) {
+			/*
+			 * If parallel charging is not available, disable it.
+			 * FCC for main charger will be configured in that.
+			 */
+			pr_smb(PR_STATUS, "parallel charging unavailable\n");
+			smbchg_parallel_usb_disable(chip);
+			goto out;
+		}
+		rc = smbchg_set_fastchg_current(chip,
+				chip->cfg_fastchg_current_ma);
+		if (rc)
+			pr_err("Couldn't set fastchg current rc: %d\n",
+				rc);
+	}
+out:
+	mutex_unlock(&chip->parallel.lock);
 	return rc;
 }
 
@@ -2119,13 +2194,21 @@ static int smbchg_set_thermal_limited_dc_current_max(struct smbchg_chip *chip,
 static int smbchg_set_thermal_limited_usb_current_max(struct smbchg_chip *chip,
 							int current_ma)
 {
-	int rc;
+	int rc, aicl_ma;
 
+	aicl_ma = smbchg_get_aicl_level_ma(chip);
 	chip->usb_tl_current_ma =
 		calc_thermal_limited_current(chip, current_ma);
 	rc = smbchg_set_usb_current_max(chip, chip->usb_tl_current_ma);
+	if (rc) {
+		pr_err("Failed to set usb current max: %d\n", rc);
+		return rc;
+	}
 
-	smbchg_rerun_aicl(chip);
+	pr_smb(PR_STATUS, "AICL = %d, ICL = %d\n",
+			aicl_ma, chip->usb_max_current_ma);
+	if (chip->usb_max_current_ma > aicl_ma && smbchg_is_aicl_complete(chip))
+		smbchg_rerun_aicl(chip);
 	smbchg_parallel_usb_check_ok(chip);
 	return rc;
 }
@@ -2207,25 +2290,24 @@ out:
 	return rc;
 }
 
+static int smbchg_ibat_ocp_threshold_ua = 4500000;
+module_param(smbchg_ibat_ocp_threshold_ua, int, 0644);
+
 #define UCONV			1000000LL
-#define VIN_FLASH_UV		5500000LL
-#define FLASH_V_THRESHOLD	3000000LL
+#define MCONV			1000LL
+#define FLASH_V_THRESHOLD	3000000
+#define FLASH_VDIP_MARGIN	100000
+#define VPH_FLASH_VDIP		(FLASH_V_THRESHOLD + FLASH_VDIP_MARGIN)
 #define BUCK_EFFICIENCY		800LL
 static int smbchg_calc_max_flash_current(struct smbchg_chip *chip)
 {
-	int ocv_uv, ibat_ua, esr_uohm, rbatt_uohm, rc;
-	int64_t ibat_flash_ua, total_flash_ua, total_flash_power_fw;
+	int ocv_uv, esr_uohm, rbatt_uohm, ibat_now, rc;
+	int64_t ibat_flash_ua, avail_flash_ua, avail_flash_power_fw;
+	int64_t ibat_safe_ua, vin_flash_uv, vph_flash_uv;
 
 	rc = get_property_from_fg(chip, POWER_SUPPLY_PROP_VOLTAGE_OCV, &ocv_uv);
 	if (rc) {
 		pr_smb(PR_STATUS, "bms psy does not support OCV\n");
-		return 0;
-	}
-
-	rc = get_property_from_fg(chip,
-			POWER_SUPPLY_PROP_CURRENT_NOW, &ibat_ua);
-	if (rc) {
-		pr_smb(PR_STATUS, "bms psy does not support current_now\n");
 		return 0;
 	}
 
@@ -2236,16 +2318,52 @@ static int smbchg_calc_max_flash_current(struct smbchg_chip *chip)
 		return 0;
 	}
 
+	rc = msm_bcl_read(BCL_PARAM_CURRENT, &ibat_now);
+	if (rc) {
+		pr_smb(PR_STATUS, "BCL current read failed: %d\n", rc);
+		return 0;
+	}
+
 	rbatt_uohm = esr_uohm + chip->rpara_uohm + chip->rslow_uohm;
-	ibat_flash_ua = (div_s64((ocv_uv - FLASH_V_THRESHOLD) * UCONV,
-			rbatt_uohm)) - ibat_ua;
-	total_flash_power_fw = FLASH_V_THRESHOLD * ibat_flash_ua
-			* BUCK_EFFICIENCY;
-	total_flash_ua = div64_s64(total_flash_power_fw, VIN_FLASH_UV * 1000LL);
+	/*
+	 * Calculate the maximum current that can pulled out of the battery
+	 * before the battery voltage dips below a safe threshold.
+	 */
+	ibat_safe_ua = div_s64((ocv_uv - VPH_FLASH_VDIP) * UCONV,
+				rbatt_uohm);
+
+	if (ibat_safe_ua <= smbchg_ibat_ocp_threshold_ua) {
+		/*
+		 * If the calculated current is below the OCP threshold, then
+		 * use it as the possible flash current.
+		 */
+		ibat_flash_ua = ibat_safe_ua - ibat_now;
+		vph_flash_uv = VPH_FLASH_VDIP;
+	} else {
+		/*
+		 * If the calculated current is above the OCP threshold, then
+		 * use the ocp threshold instead.
+		 *
+		 * Any higher current will be tripping the battery OCP.
+		 */
+		ibat_flash_ua = smbchg_ibat_ocp_threshold_ua - ibat_now;
+		vph_flash_uv = ocv_uv - div64_s64((int64_t)rbatt_uohm
+				* smbchg_ibat_ocp_threshold_ua, UCONV);
+	}
+	/* Calculate the input voltage of the flash module. */
+	vin_flash_uv = max((chip->vled_max_uv + 500000LL),
+				(vph_flash_uv * 1200 / 1000));
+	/* Calculate the available power for the flash module. */
+	avail_flash_power_fw = BUCK_EFFICIENCY * vph_flash_uv * ibat_flash_ua;
+	/*
+	 * Calculate the available amount of current the flash module can draw
+	 * before collapsing the battery. (available power/ flash input voltage)
+	 */
+	avail_flash_ua = div64_s64(avail_flash_power_fw, vin_flash_uv * MCONV);
 	pr_smb(PR_MISC,
-		"ibat_flash=%lld\n, ocv=%d, ibat=%d, rbatt=%d t_flash=%lld\n",
-		ibat_flash_ua, ocv_uv, ibat_ua, rbatt_uohm, total_flash_ua);
-	return (int)total_flash_ua;
+		"avail_iflash=%lld, ocv=%d, ibat=%d, rbatt=%d\n",
+		avail_flash_ua, ocv_uv, ibat_now, rbatt_uohm);
+	return (int)avail_flash_ua;
 }
 
 #define FCC_CMP_CFG	0xF3
@@ -2309,6 +2427,7 @@ static int smbchg_float_voltage_comp_set(struct smbchg_chip *chip, int code)
 #define VHIGH_RANGE_FLOAT_STEP_MV	20
 static int smbchg_float_voltage_set(struct smbchg_chip *chip, int vfloat_mv)
 {
+	struct power_supply *parallel_psy = get_parallel_psy(chip);
 	int rc, delta;
 	u8 temp;
 
@@ -2336,6 +2455,14 @@ static int smbchg_float_voltage_set(struct smbchg_chip *chip, int vfloat_mv)
 		temp = VHIGH_RANGE_FLOAT_MIN_VAL + delta
 				/ VHIGH_RANGE_FLOAT_STEP_MV;
 		vfloat_mv -= delta % VHIGH_RANGE_FLOAT_STEP_MV;
+	}
+
+	if (parallel_psy) {
+		rc = power_supply_set_voltage_limit(parallel_psy,
+				vfloat_mv + 50);
+		if (rc)
+			dev_err(chip->dev, "Couldn't set float voltage on parallel psy rc: %d\n",
+				rc);
 	}
 
 	rc = smbchg_sec_masked_write(chip, chip->chgr_base + VFLOAT_CFG_REG,
@@ -2414,7 +2541,7 @@ static int smbchg_battery_set_property(struct power_supply *psy,
 		smbchg_system_temp_level_set(chip, val->intval);
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
-		rc = smbchg_set_fastchg_current(chip, val->intval / 1000);
+		rc = smbchg_set_fastchg_current_user(chip, val->intval / 1000);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		rc = smbchg_float_voltage_set(chip, val->intval);
@@ -3972,7 +4099,8 @@ static irqreturn_t aicl_done_handler(int irq, void *_chip)
 	long elapsed_seconds;
 	unsigned long now_seconds;
 
-	pr_smb(PR_INTERRUPT, "Aicl triggered c:%d dgltch:%d first:%ld\n",
+	pr_smb(PR_INTERRUPT, "Aicl triggered icl:%d c:%d dgltch:%d first:%ld\n",
+			smbchg_get_aicl_level_ma(chip),
 			chip->aicl_irq_count, chip->aicl_deglitch_short,
 			chip->first_aicl_seconds);
 
@@ -4658,9 +4786,10 @@ err:
 	return rc;
 }
 
+#define DEFAULT_VLED_MAX_UV		3500000
 static int smb_parse_dt(struct smbchg_chip *chip)
 {
-	int rc = 0;
+	int rc = 0, ocp_thresh = -EINVAL;
 	struct device_node *node = chip->dev->of_node;
 	const char *dc_psy_type, *bpd;
 
@@ -4670,12 +4799,21 @@ static int smb_parse_dt(struct smbchg_chip *chip)
 	}
 
 	/* read optional u32 properties */
+	OF_PROP_READ(chip, ocp_thresh,
+			"ibat-ocp-threshold-ua", rc, 1);
+	if (ocp_thresh >= 0)
+		smbchg_ibat_ocp_threshold_ua = ocp_thresh;
 	OF_PROP_READ(chip, chip->iterm_ma, "iterm-ma", rc, 1);
 	OF_PROP_READ(chip, chip->target_fastchg_current_ma,
 			"fastchg-current-ma", rc, 1);
 	OF_PROP_READ(chip, chip->vfloat_mv, "float-voltage-mv", rc, 1);
 	OF_PROP_READ(chip, chip->safety_time, "charging-timeout-mins", rc, 1);
+	OF_PROP_READ(chip, chip->vled_max_uv, "vled-max-uv", rc, 1);
+	if (chip->vled_max_uv < 0)
+		chip->vled_max_uv = DEFAULT_VLED_MAX_UV;
 	OF_PROP_READ(chip, chip->rpara_uohm, "rparasitic-uohm", rc, 1);
+	if (chip->rpara_uohm < 0)
+		chip->rpara_uohm = 0;
 	OF_PROP_READ(chip, chip->prechg_safety_time, "precharging-timeout-mins",
 			rc, 1);
 	OF_PROP_READ(chip, chip->fastchg_current_comp, "fastchg-current-comp",
@@ -4702,6 +4840,7 @@ static int smb_parse_dt(struct smbchg_chip *chip)
 			"parallel-usb-9v-min-current-ma", rc, 1);
 	OF_PROP_READ(chip, chip->parallel.allowed_lowering_ma,
 			"parallel-allowed-lowering-ma", rc, 1);
+	chip->cfg_fastchg_current_ma = chip->target_fastchg_current_ma;
 	if (chip->parallel.min_current_thr_ma != -EINVAL
 			&& chip->parallel.min_9v_current_thr_ma != -EINVAL)
 		chip->parallel.avail = true;
@@ -4782,7 +4921,7 @@ static int smb_parse_dt(struct smbchg_chip *chip)
 	if (rc)
 		chip->bms_psy_name = NULL;
 
-	/* read the bms power supply name */
+	/* read the battery power supply name */
 	rc = of_property_read_string(node, "qcom,battery-psy-name",
 						&chip->battery_psy_name);
 	if (rc)
