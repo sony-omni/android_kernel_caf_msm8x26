@@ -485,6 +485,11 @@ void msm_isp_fetch_engine_done_notify(struct vfe_device *vfe_dev,
 	struct msm_isp_event_data fe_rd_done_event;
 	if (!fetch_engine_info->is_busy)
 		return;
+
+	vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id++;
+	if (vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id == 0)
+		vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id = 1;
+
 	memset(&fe_rd_done_event, 0, sizeof(struct msm_isp_event_data));
 	fe_rd_done_event.frame_id =
 		vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id;
@@ -1833,25 +1838,35 @@ static int msm_vfe_iommu_fault_handler(struct iommu_domain *domain,
 	struct device *dev, unsigned long iova, int flags, void *token)
 {
 	struct vfe_device *vfe_dev = NULL;
+	int rc = -ENOSYS;
 
 	if (token) {
 		vfe_dev = (struct vfe_device *)token;
 		msm_isp_axi_disable_all_wm(vfe_dev);
 		msm_isp_stats_disable(vfe_dev);
+		/* VFE_SRC_MAX will call reg update on all stream src */
+		vfe_dev->hw_info->vfe_ops.core_ops.reg_update(vfe_dev,
+			VFE_SRC_MAX);
 		if (!vfe_dev->buf_mgr || !vfe_dev->buf_mgr->ops) {
 			pr_err("%s:%d] buf_mgr %p\n", __func__,
 				__LINE__, vfe_dev->buf_mgr);
 			goto end;
 		}
-		if (!vfe_dev->buf_mgr->pagefault_debug)
+		if (!vfe_dev->buf_mgr->pagefault_debug) {
+			vfe_dev->buf_mgr->pagefault_debug = 1;
 			msm_isp_enqueue_tasklet_cmd(vfe_dev, 0, 0, 1);
+		} else {
+			/* Page fault previously handled, avoid flooding logs*/
+			rc = 0;
+			goto end;
+		}
 	} else {
 		ISP_DBG("%s:%d] no token received: %p\n",
 			__func__, __LINE__, token);
 		goto end;
 	}
 end:
-	return -ENOSYS;
+	return rc;
 }
 
 int msm_isp_open_node(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)

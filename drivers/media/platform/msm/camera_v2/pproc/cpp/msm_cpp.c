@@ -1672,10 +1672,6 @@ static int msm_cpp_send_frame_to_hardware(struct cpp_device *cpp_dev,
 			flags);
 		if (queue_len == 1) {
 			atomic_set(&cpp_timer.used, 1);
-			/* install timer for cpp timeout */
-			CPP_DBG("Installing cpp_timer\n");
-			setup_timer(&cpp_timer.cpp_timer,
-				cpp_timer_callback, (unsigned long)&cpp_timer);
 		}
 		CPP_DBG("Starting timer to fire in %d ms. (jiffies=%lu)\n",
 			CPP_CMD_TIMEOUT_MS, jiffies);
@@ -2662,7 +2658,8 @@ STREAM_BUFF_END:
 		break;
 	}
 	case VIDIOC_MSM_CPP_IOMMU_DETACH: {
-		if (cpp_dev->iommu_state == CPP_IOMMU_STATE_ATTACHED) {
+		if ((cpp_dev->iommu_state == CPP_IOMMU_STATE_ATTACHED) &&
+			(cpp_dev->stream_cnt == 0)) {
 			iommu_detach_device(cpp_dev->domain,
 				cpp_dev->iommu_ctx);
 			cpp_dev->iommu_state = CPP_IOMMU_STATE_DETACHED;
@@ -2880,14 +2877,14 @@ static struct msm_cpp_frame_info_t *get_64bit_cpp_frame_from_compat(
 		(new_frame->msg_len > MSM_CPP_MAX_FRAME_LENGTH)) {
 		pr_err("%s:%d: Invalid frame len:%d\n", __func__,
 			__LINE__, new_frame->msg_len);
-		goto strip_err;
+		goto frame_err;
 	}
 
 	cpp_frame_msg = kzalloc(sizeof(uint32_t)*new_frame->msg_len,
 		GFP_KERNEL);
 	if (!cpp_frame_msg) {
 		pr_err("Insufficient memory\n");
-		goto strip_err;
+		goto frame_err;
 	}
 
 	rc = (copy_from_user(cpp_frame_msg,
@@ -2904,8 +2901,6 @@ static struct msm_cpp_frame_info_t *get_64bit_cpp_frame_from_compat(
 
 frame_msg_err:
 	kfree(cpp_frame_msg);
-strip_err:
-	kfree(new_frame->strip_info);
 frame_err:
 	kfree(new_frame);
 no_mem:
@@ -3012,6 +3007,10 @@ static long msm_cpp_subdev_fops_compat_ioctl(struct file *file,
 	kp_ioctl.trans_code = up32_ioctl.trans_code;
 	/* Convert the 32 bit pointer to 64 bit pointer */
 	kp_ioctl.ioctl_ptr = compat_ptr(up32_ioctl.ioctl_ptr);
+	if (!kp_ioctl.ioctl_ptr) {
+		pr_err("%s: Invalid ioctl pointer\n", __func__);
+		return -EINVAL;
+	}
 
 	/*
 	 * Convert 32 bit IOCTL ID's to 64 bit IOCTL ID's
@@ -3523,6 +3522,10 @@ static int cpp_probe(struct platform_device *pdev)
 	cpp_dev->iommu_state = CPP_IOMMU_STATE_DETACHED;
 	cpp_timer.data.cpp_dev = cpp_dev;
 	atomic_set(&cpp_timer.used, 0);
+	/* install timer for cpp timeout */
+	CPP_DBG("Installing cpp_timer\n");
+	setup_timer(&cpp_timer.cpp_timer,
+		cpp_timer_callback, (unsigned long)&cpp_timer);
 	cpp_dev->fw_name_bin = NULL;
 	if (rc == 0)
 		CPP_DBG("SUCCESS.");
