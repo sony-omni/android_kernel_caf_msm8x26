@@ -17,6 +17,9 @@
 #include "msm_camera_i2c_mux.h"
 #include <linux/regulator/rpm-smd-regulator.h>
 #include <linux/regulator/consumer.h>
+#ifdef CONFIG_MACH_SONY_EAGLE
+#include "eeprom/msm_eeprom.h"
+#endif
 
 #undef CDBG
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
@@ -186,8 +189,27 @@ static int32_t msm_sensor_get_dt_data(struct device_node *of_node,
 	if (0 > of_property_read_u32(of_node, "qcom,sensor-mode",
 		&sensordata->sensor_info->modes_supported)) {
 		CDBG("%s:%d Default sensor mode\n", __func__, __LINE__);
-		sensordata->sensor_info->modes_supported = 0;
+                sensordata->sensor_info->modes_supported = 0;
+        }
+#ifdef CONFIG_MACH_SONY_EAGLE
+	if(strcmp("imx134",s_ctrl->sensordata->sensor_name)==0) {
+		CDBG("%s:Main camera source no. is : %d\n", __func__,
+			cci_camera_source);
+		if(cci_camera_source == 1) {
+			s_ctrl->sensordata->sensor_name = "imx134_Sony";
+			CDBG("This is original source camera module-SONY\n");
+		}
+		else if(cci_camera_source == 2) {
+			s_ctrl->sensordata->sensor_name = "imx134li_QC";
+			CDBG("This is second source camera module-LiteON\n");
+		}
+		else {
+			pr_err("%s Invalid camera source number:%d\n", __func__,cci_camera_source);
+		}
 	}
+	pr_err("%s:[Mark] sensor-name: %s\n", __func__,
+			s_ctrl->sensordata->sensor_name);
+#endif
 	CDBG("%s qcom,sensor-mode %d\n", __func__,
 		sensordata->sensor_info->modes_supported);
 
